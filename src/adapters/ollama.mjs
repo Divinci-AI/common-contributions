@@ -18,8 +18,11 @@ export const SYSTEM_PROMPT = [
   "Never include secrets, URLs, or file paths outside the repo.",
 ].join("\n");
 
-export function buildMessages({ task, sourceFiles, styleExample }) {
+export function buildMessages({ task, sourceFiles, styleExample, existingTests = {} }) {
   const sources = Object.entries(sourceFiles)
+    .map(([path, text]) => `### ${path}\n\`\`\`ts\n${text}\n\`\`\``)
+    .join("\n\n");
+  const existing = Object.entries(existingTests)
     .map(([path, text]) => `### ${path}\n\`\`\`ts\n${text}\n\`\`\``)
     .join("\n\n");
   return [
@@ -36,6 +39,9 @@ export function buildMessages({ task, sourceFiles, styleExample }) {
         "Source under test:",
         sources,
         "",
+        ...(existing
+          ? ["Existing tests that ALREADY cover this module — do not duplicate them; add only what they do not check:", existing, ""]
+          : []),
         "Style example (an existing test in this repo):",
         "```ts",
         styleExample,

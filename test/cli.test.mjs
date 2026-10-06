@@ -117,3 +117,108 @@ test("run-one: a model reply containing a secret-shaped string trips STOP and wr
   assert.ok(!existsSync(join(repo, "orchestrator/src/provenance.test.ts")));
   assert.equal(JSON.parse((await cli(["status"], home)).stderr).stopped, true);
 });
+
+// ── replay mode: an already-written reply (e.g. a Claude Code subagent's) goes through the same checks ──
+const REPLY = "```ts\nimport { it } from \"vitest\";\nit(\"ok\", () => {});\n```";
+const replyFile = (text) => { const f = join(tmp(), "reply.txt"); writeFileSync(f, text); return f; };
+const replayArgs = (issues, repo, reply, extra = []) => ["run-one", issues, "23", "--repo", repo, "--model", "sonnet", "--reply-file", reply, ...extra, "--no-verify"];
+
+test("replay: a clean reply is validated and written, with no network at all", async () => {
+  const { repo, issues } = fixture();
+  requests.length = 0;
+  const r = await cli(replayArgs(issues, repo, replyFile(REPLY), ["--tool-uses", "0", "--tokens", "1200,300"]), tmp());
+  const rep = report(r);
+  assert.equal(rep.outcome, "ok");
+  assert.deepEqual(rep.wrote, ["orchestrator/src/provenance.test.ts"]);
+  assert.equal(requests.length, 0);
+});
+
+test("replay: ANY reported tool use refuses the run and trips STOP; nothing is written", async () => {
+  const { repo, issues } = fixture();
+  const home = tmp();
+  const r = await cli(replayArgs(issues, repo, replyFile(REPLY), ["--tool-uses", "2"]), home);
+  assert.equal(report(r).outcome, "stopped");
+  assert.ok(!existsSync(join(repo, "orchestrator/src/provenance.test.ts")));
+  assert.equal(JSON.parse((await cli(["status"], home)).stderr).stopped, true);
+});
+
+test("replay: not saying how many tools were used is refused", async () => {
+  const { repo, issues } = fixture();
+  const r = await cli(replayArgs(issues, repo, replyFile(REPLY)), tmp());
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /--tool-uses/);
+});
+
+test("replay: a reply with a secret-shaped string trips STOP and writes nothing", async () => {
+  const { repo, issues } = fixture();
+  const fake = "gh" + "p_" + "a1B2c3D4e5".repeat(4);
+  const r = await cli(replayArgs(issues, repo, replyFile("```ts\nconst t = \"" + fake + "\";\n```"), ["--tool-uses", "0"]), tmp());
+  assert.equal(report(r).outcome, "stopped");
+  assert.ok(!existsSync(join(repo, "orchestrator/src/provenance.test.ts")));
+});
+
+test("replay: a reply whose code block is missing writes nothing", async () => {
+  const { repo, issues } = fixture();
+  const r = await cli(replayArgs(issues, repo, replyFile("I could not."), ["--tool-uses", "0"]), tmp());
+  assert.equal(report(r).outcome, "no-file");
+});
+
+test("--print-prompt shows exactly the prompt, names the one allowed file, and sends nothing", async () => {
+  const { repo, issues } = fixture();
+  requests.length = 0;
+  const r = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--print-prompt"], tmp());
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /\[system\]/);
+  assert.match(r.stdout, /You may write ONLY this file: orchestrator\/src\/provenance\.test\.ts/);
+  assert.match(r.stdout, /export const SOURCES/);
+  assert.equal(requests.length, 0);
+});
+
+// ── coverage gate ──
+function fixtureWithExistingTest(issueMentionsIt) {
+  const { repo } = fixture();
+  writeFileSync(join(repo, "orchestrator/src/source-yield.test.ts"), 'import { isSource } from "./provenance.js";\nit("covers isSource", () => { isSource("x"); });\n');
+  const body = "## What\nx\n" + (issueMentionsIt ? "Existing tests: `source-yield.test.ts` cover isSource; they do not cover isInferred.\n" : "") +
+    "\n## Done when (one file: `orchestrator/src/provenance.test.ts`)\n- covers `orchestrator/src/provenance.ts`\n";
+  const issues = join(tmp(), "issues.json");
+  writeFileSync(issues, JSON.stringify([{ number: 23, title: "t", labels: [{ name: "agent-ready" }], body }]));
+  return { repo, issues };
+}
+
+test("coverage gate: run-one REFUSES when an existing test imports the module and the issue does not name it", async () => {
+  const { repo, issues } = fixtureWithExistingTest(false);
+  requests.length = 0;
+  const r = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--host", `http://127.0.0.1:${port}`, "--no-verify"], tmp());
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /already import a module this issue names/);
+  assert.match(r.stderr, /source-yield\.test\.ts/);
+  assert.equal(requests.length, 0, "the model must not be called");
+});
+
+test("coverage gate: the refusal also applies to --print-prompt and replay (no side door)", async () => {
+  const { repo, issues } = fixtureWithExistingTest(false);
+  const a = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--print-prompt"], tmp());
+  assert.equal(a.status, 2);
+  const b = await cli(replayArgs(issues, repo, replyFile(REPLY), ["--tool-uses", "0"]), tmp());
+  assert.equal(b.status, 2);
+  assert.ok(!existsSync(join(repo, "orchestrator/src/provenance.test.ts")));
+});
+
+test("coverage gate: once the issue names the existing test, the run proceeds and the prompt CARRIES that test", async () => {
+  const { repo, issues } = fixtureWithExistingTest(true);
+  const p = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--print-prompt"], tmp());
+  assert.equal(p.status, 0, p.stderr);
+  assert.match(p.stdout, /ALREADY cover this module/);
+  assert.match(p.stdout, /covers isSource/);
+  const r = await cli(replayArgs(issues, repo, replyFile(REPLY), ["--tool-uses", "0"]), tmp());
+  assert.equal(report(r).outcome, "ok");
+});
+
+test("coverage command reports the importing tests and which exports they reference", async () => {
+  const { repo } = fixtureWithExistingTest(true);
+  const r = await cli(["coverage", "--repo", repo, "--module", "orchestrator/src/provenance.ts"], tmp());
+  assert.equal(r.status, 0, r.stderr);
+  const rep = JSON.parse(r.stdout);
+  assert.deepEqual(rep.referencingTests, ["orchestrator/src/source-yield.test.ts"]);
+  assert.deepEqual(rep.exports.find((e) => e.name === "SOURCES").referencedIn, []);
+});

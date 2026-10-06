@@ -1,0 +1,79 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { classify, runMutations, validateMutations } from "../src/mutate.mjs";
+import { tmp } from "./helpers.mjs";
+
+const SRC = 'export const f = (x) => x > 1;\nexport const g = (x) => x === "a";\n';
+function setup() {
+  const root = tmp();
+  mkdirSync(join(root, "src"), { recursive: true });
+  writeFileSync(join(root, "src/m.js"), SRC);
+  return root;
+}
+// A fake "test run": passes only while f(2) is true and g("a") is true.
+const fakeRun = (root) => () => {
+  const t = readFileSync(join(root, "src/m.js"), "utf8");
+  if (/\(\(/.test(t)) return { ok: false, output: "SyntaxError: Unexpected token" };
+  const f = t.includes("x > 1");
+  const g = t.includes('x === "a"');
+  return f && g ? { ok: true, output: "" } : { ok: false, output: `AssertionError: expected true` };
+};
+
+test("classify separates a behavioural failure from a mutant that does not build", () => {
+  assert.equal(classify({ ok: true, output: "" }), "survived");
+  assert.equal(classify({ ok: false, output: "AssertionError: expected 1 to be 2" }), "caught");
+  assert.equal(classify({ ok: false, output: "Transform failed with 1 error: Unexpected token" }), "broke-build");
+  assert.equal(classify({ ok: false, output: "src/x.ts(3,1): error TS2304: Cannot find name" }), "broke-build");
+});
+
+test("caught, survived, broke-build and skipped are reported separately, and the file is restored byte-identical", () => {
+  const root = setup();
+  const res = runMutations({
+    root, sourcePath: "src/m.js", runTest: fakeRun(root),
+    mutations: [
+      { id: "flip-f", old: "x > 1", new: "x < 1" },
+      { id: "narrow-g", old: 'x === "a"', new: 'x === "a" /* harmless */' }, // test cannot tell: survives
+      { id: "syntax", old: "x > 1", new: "((x > 1" },
+      { id: "absent", old: "nope", new: "z" },
+    ],
+  });
+  const by = Object.fromEntries(res.results.map((r) => [r.id, r.outcome]));
+  assert.deepEqual(by, { "flip-f": "caught", "narrow-g": "survived", syntax: "broke-build", absent: "skipped" });
+  assert.equal(res.caught, 1);
+  assert.equal(res.survived, 1);
+  assert.equal(res.brokeBuild, 1);
+  assert.equal(res.skipped, 1);
+  assert.ok(res.restored);
+  assert.equal(readFileSync(join(root, "src/m.js"), "utf8"), SRC);
+});
+
+test("a pattern that occurs more than once is skipped, never guessed at", () => {
+  const root = setup();
+  const res = runMutations({ root, sourcePath: "src/m.js", runTest: fakeRun(root), mutations: [{ id: "dup", old: "x", new: "y" }] });
+  assert.equal(res.results[0].outcome, "skipped");
+  assert.match(res.results[0].reason, /\d+ times/);
+});
+
+test("refuses to run if the test already fails on the UNMUTATED source", () => {
+  const root = setup();
+  assert.throws(() => runMutations({ root, sourcePath: "src/m.js", runTest: () => ({ ok: false, output: "x" }), mutations: [{ id: "a", old: "x > 1", new: "x < 1" }] }), /UNMUTATED/);
+  assert.equal(readFileSync(join(root, "src/m.js"), "utf8"), SRC);
+});
+
+test("the source is restored even if the test runner throws mid-mutation", () => {
+  const root = setup();
+  let n = 0;
+  const boom = () => { n += 1; if (n === 2) throw new Error("runner exploded"); return { ok: true, output: "" }; };
+  assert.throws(() => runMutations({ root, sourcePath: "src/m.js", runTest: boom, mutations: [{ id: "a", old: "x > 1", new: "x < 1" }] }), /exploded/);
+  assert.equal(readFileSync(join(root, "src/m.js"), "utf8"), SRC);
+});
+
+test("validateMutations rejects malformed, no-op and duplicate entries", () => {
+  assert.throws(() => validateMutations({}), /array/);
+  assert.throws(() => validateMutations([{ id: "a", old: "x" }]), /bad mutation/);
+  assert.throws(() => validateMutations([{ id: "a", old: "x", new: "x" }]), /identical/);
+  assert.throws(() => validateMutations([{ id: "a", old: "x", new: "y" }, { id: "a", old: "p", new: "q" }]), /duplicate/);
+  assert.equal(validateMutations([{ id: "a", old: "x", new: "y" }]).length, 1);
+});

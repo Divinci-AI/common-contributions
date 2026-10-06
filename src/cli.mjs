@@ -5,6 +5,7 @@
  *   node src/cli.mjs clear-stop --yes  a human clears it
  *   node src/cli.mjs dry-run <issues.json>   run the loop with a STUB agent (no model, no network)
  *   node src/cli.mjs run-one <issues.json> <issueNumber> --repo <dir> --model <ollama-model> [--host URL] [--no-verify]
+ *       (--reply-file F [--tokens in,out]: replay an already-written reply through the same checks; --print-prompt: show the prompt)
  *       ONE issue, a LOCAL Ollama model ($0). Writes the one allowed file into --repo's working tree and runs the
  *       project's own tsc + vitest on it. Never commits, pushes or opens a PR.
  * State lives in $COMMON_CONTRIBUTIONS_HOME (default ~/.divinci/common-contributions).
@@ -18,8 +19,11 @@ import { runLoop, runTask } from "./runner.mjs";
 import { BudgetExceededError } from "./budget.mjs";
 import { StopRequestedError } from "./killswitch.mjs";
 import { selectRunnableTasks } from "./scope.mjs";
-import { makeOllamaAgent } from "./adapters/ollama.mjs";
+import { buildMessages, makeOllamaAgent } from "./adapters/ollama.mjs";
+import { makeReplayAgent } from "./adapters/replay.mjs";
 import { applyFiles, runChecked } from "./verify.mjs";
+import { coverageReport, unacknowledgedTests } from "./coverage.mjs";
+import { runMutations } from "./mutate.mjs";
 
 const stateDir = process.env.COMMON_CONTRIBUTIONS_HOME || join(homedir(), ".divinci", "common-contributions");
 const kill = new KillSwitch({ stateDir });
@@ -61,8 +65,10 @@ if (cmd === "status") {
   const modelName = flag("--model");
   const host = flag("--host", "http://127.0.0.1:11434");
   if (!issuesFile || !numberArg || !repo || !modelName) { console.error("usage: run-one <issues.json> <issueNumber> --repo <dir> --model <name>"); process.exit(2); }
+  const replyFile = flag("--reply-file");
   const hostName = new URL(host).hostname;
-  if (!["127.0.0.1", "localhost", "::1", "[::1]"].includes(hostName)) { console.error(`refusing: run-one is for a LOCAL model; host "${hostName}" is not loopback`); process.exit(2); }
+  // A replayed reply needs no network at all; a live local model must be loopback.
+  if (!replyFile && !["127.0.0.1", "localhost", "::1", "[::1]"].includes(hostName)) { console.error(`refusing: run-one is for a LOCAL model; host "${hostName}" is not loopback`); process.exit(2); }
 
   const task = selectRunnableTasks(JSON.parse(readFileSync(issuesFile, "utf8"))).find((t) => String(t.number) === String(numberArg));
   if (!task) { console.error(`issue #${numberArg} is not runnable (needs the agent-ready label and a parseable one-file scope)`); process.exit(2); }
@@ -74,16 +80,49 @@ if (cmd === "status") {
   const sibling = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".test.ts")).map((f) => join(dir, f)).filter((f) => statSync(f).size < 4000).sort()[0] : undefined;
   const styleExample = sibling ? readFileSync(sibling, "utf8").slice(0, 3000) : "";
 
-  const model = `ollama:${modelName}`;
+  // COVERAGE GATE: every existing test that already imports a module this issue names must be NAMED in the issue.
+  // (An issue was once filed for a module that already had tests, because the check looked only for a sibling file.)
+  const existingTests = {};
+  const unacknowledged = [];
+  for (const mod of named) {
+    const rep = coverageReport({ root: repo, modulePath: mod, allowed: task.allowed });
+    for (const f of unacknowledgedTests(rep, task.body)) unacknowledged.push(`${f} (covers ${mod})`);
+    for (const f of rep.referencingTests.slice(0, 3)) existingTests[f] = readFileSync(join(repo, f), "utf8").slice(0, 6000);
+  }
+  if (unacknowledged.length > 0) {
+    console.error(`refusing: existing tests already import a module this issue names, and the issue does not mention them:\n  ${unacknowledged.join("\n  ")}\nName them in the issue (and say what they do not cover), then re-run.`);
+    process.exit(2);
+  }
+
+  if (flags.includes("--print-prompt")) {
+    // Exactly what a live model would be sent — for handing to an agent that is not behind the Ollama adapter.
+    const m = buildMessages({ task, sourceFiles, styleExample, existingTests });
+    console.log(m.map((x) => `[${x.role}]\n${x.content}`).join("\n\n"));
+    process.exit(0);
+  }
+
+  const model = replyFile ? `claude-code:${modelName}` : `ollama:${modelName}`;
   const localBudget = new Budget({ ledgerFile: join(stateDir, "ledger.jsonl"), maxUsdPerDay: 0, maxUsdTotal: 0, prices: { [model]: LOCAL_MODEL_PRICE } });
-  const agent = makeOllamaAgent({ host, sourceFiles, styleExample, modelName });
+  // A replayed reply came from an agent that had tools. The design is "text in, text out": if it reports ANY tool
+  // use, the run is refused and STOP is tripped — we cannot vouch for what a tool-using agent did to the machine.
+  const toolUses = flag("--tool-uses");
+  if (replyFile && toolUses !== undefined && Number(toolUses) !== 0) {
+    try { kill.trip(`replayed agent reported ${toolUses} tool use(s); text-only is required`); } catch (e) { console.warn(JSON.stringify({ issue: task.number, model: modelName, outcome: "stopped", reason: e.message }, null, 2)); }
+    process.exit(0);
+  }
+  if (replyFile && toolUses === undefined) { console.error("refusing: a replayed reply must say how many tools the agent used (--tool-uses N)"); process.exit(2); }
+  const tokens = flag("--tokens"); // "in,out" as reported by the caller for a replayed reply (informational; $0)
+  const reported = tokens ? { inputTokens: Number(tokens.split(",")[0]), outputTokens: Number(tokens.split(",")[1]) } : undefined;
+  const agent = replyFile
+    ? makeReplayAgent({ replyText: readFileSync(replyFile, "utf8"), usage: reported })
+    : makeOllamaAgent({ host, sourceFiles, styleExample, modelName, existingTests });
   const report = { issue: task.number, model: modelName };
   let result;
   try {
     result = await runTask({
       task, agent, budget: localBudget, kill, model,
       limits: { maxInputTokens: 12000, maxOutputTokens: 2500 },
-      allowlist: [hostName],
+      allowlist: replyFile ? [] : [hostName],
     });
     report.outcome = "ok";
   } catch (e) {
@@ -107,7 +146,24 @@ if (cmd === "status") {
     }
   }
   console.warn(JSON.stringify(report, null, 2));
+} else if (cmd === "coverage") {
+  const flag = (n) => { const i = rest.indexOf(n); return i === -1 ? undefined : rest[i + 1]; };
+  const repo = flag("--repo"), mod = flag("--module");
+  if (!repo || !mod) { console.error("usage: coverage --repo <dir> --module <path/to/source.ts>"); process.exit(2); }
+  console.log(JSON.stringify(coverageReport({ root: repo, modulePath: mod }), null, 2));
+} else if (cmd === "mutate") {
+  const flag = (n) => { const i = rest.indexOf(n); return i === -1 ? undefined : rest[i + 1]; };
+  const repo = flag("--repo"), source = flag("--source"), test = flag("--test"), file = flag("--mutations"), cwdRel = flag("--cwd") ?? ".";
+  if (!repo || !source || !test || !file) { console.error("usage: mutate --repo <dir> --source <path> --test <path> --mutations <file.json> [--cwd <subdir>]"); process.exit(2); }
+  const cwd = join(repo, cwdRel);
+  const testInCwd = test.startsWith(cwdRel + "/") ? test.slice(cwdRel.length + 1) : test;
+  const runTest = () => {
+    const r = runChecked({ cwd, command: "npx", args: ["--no-install", "vitest", "run", testInCwd] });
+    return { ok: r.ok, output: r.stdout + r.stderr };
+  };
+  const out = runMutations({ root: repo, sourcePath: source, mutations: JSON.parse(readFileSync(file, "utf8")), runTest });
+  console.warn(JSON.stringify(out, null, 2));
 } else {
-  console.error("usage: status | stop [reason] | clear-stop --yes | dry-run <issues.json>");
+  console.error("usage: status | stop [reason] | clear-stop --yes | dry-run <issues.json> | run-one ... | coverage ... | mutate ...");
   process.exit(2);
 }

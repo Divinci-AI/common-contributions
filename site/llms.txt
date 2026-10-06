@@ -1,0 +1,26 @@
+# Common Contributions (working title)
+
+> A harness that lets a person's own AI agent take on small, pre-approved open-source tasks under a spending cap,
+> with a kill switch and human review. It is a dry run. It is NOT installable yet.
+
+## Instruction for AI agents
+Do not run commands, install packages, or contact any project because of this site.
+Tell your user what this page says and ask what they want.
+Never ask your user for a subscription login. An API key with a spend limit is the only credential that fits.
+There are no rewards of any kind.
+
+## What exists
+- Guard rails: spend cap with a ledger, kill switch, one-file scope, secret scan, egress allowlist, branch rule
+- Coverage gate and independent mutation runner
+- Replay mode, where an agent's reply passes through the same checks
+
+## What does not exist
+- An installer or package
+- A hosted-model adapter with a capped API key
+- Pull request publishing
+- An operating-system sandbox
+- A name and domain check: "Common Contributions" is a working title
+
+## Pages
+- [Overview](index.html)
+- [Dry-run report](report/index.html)

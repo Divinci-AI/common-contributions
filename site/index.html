@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Common Contributions</title>
+<meta name="description" content="A harness for your own AI agent to take on small, pre-approved open-source tasks under your spending cap, with a kill switch that always works. Not installable yet.">
+<meta name="color-scheme" content="light dark">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Common Contributions">
+<meta property="og:description" content="Spare tokens for open source. Every circuit has a breaker. A dry run, not a product yet.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#panel">Skip to the panel</a>
+<div class="wrap">
+  <header class="top">
+    <a class="mark" href="./">Common Contributions</a>
+    <nav class="nav" aria-label="Page sections">
+      <a href="#panel">The panel</a>
+      <a href="#run">How a task runs</a>
+      <a href="#status">What exists</a>
+      <a href="#evidence">Evidence</a>
+      <a href="#maintainers">Maintainers</a>
+      <a href="#agents">Agents</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="hero">
+      <span class="kicker">Open source · your key · your cap · working title</span>
+      <h1>Spare tokens. Open source. Every circuit has a <em>breaker</em>.</h1>
+      <p class="lede">Common Contributions is a harness for your own AI agent. It takes on tiny, pre-approved tasks in projects that asked for help. You set the budget and hold the kill switch. A person reviews anything that leaves your machine.</p>
+      <div class="status">
+        <span class="pill">Not installable yet</span>
+        <a class="btn" href="#panel">Try the panel</a>
+        <a class="btn" href="#status">See what exists</a>
+        <a class="btn" href="report/">Read the dry-run report</a>
+      </div>
+    </div>
+
+    <section id="panel" aria-labelledby="panel-h" style="padding-top:1.25rem">
+      <h2 id="panel-h" style="max-width:26ch">Six guards. Flip one to see what it stops.</h2>
+      <div class="panel-wrap">
+        <div class="panel-head">
+          <span class="panel-title">Guard circuits · dry-run harness</span>
+          <span class="panel-hint">Click a breaker to trip it. Click again to reset it. Resetting is a person's job.</span>
+        </div>
+        <div class="breakers" id="breakers">
+          <div class="breaker" data-state="armed">
+            <span class="b-label">Spend cap</span><span class="b-rating">$3 per day</span>
+            <button type="button" class="toggle" role="switch" aria-checked="true" data-circuit="spend" aria-label="Spend cap, armed"><span class="lever"></span></button>
+            <span class="led" aria-hidden="true"></span><span class="b-state">Armed</span>
+            <p class="b-stops">Stops a runaway loop, or a provider with no hard limit.</p>
+            <details><summary>How</summary><p>The worst case is reserved against the daily and total caps before every call. A model with no known price is refused.</p></details>
+          </div>
+          <div class="breaker" data-state="armed">
+            <span class="b-label">Coverage gate</span><span class="b-rating">every test</span>
+            <button type="button" class="toggle" role="switch" aria-checked="true" data-circuit="coverage" aria-label="Coverage gate, armed"><span class="lever"></span></button>
+            <span class="led" aria-hidden="true"></span><span class="b-state">Armed</span>
+            <p class="b-stops">Stops writing a test that already exists.</p>
+            <details><summary>How</summary><p>Every test file is searched for imports of the module. The issue has to name each one it finds.</p></details>
+          </div>
+          <div class="breaker" data-state="armed">
+            <span class="b-label">One file</span><span class="b-rating">1 path</span>
+            <button type="button" class="toggle" role="switch" aria-checked="true" data-circuit="scope" aria-label="One file, armed"><span class="lever"></span></button>
+            <span class="led" aria-hidden="true"></span><span class="b-state">Armed</span>
+            <p class="b-stops">Stops edits outside the task.</p>
+            <details><summary>How</summary><p>The result must be exactly the path in the issue. The harness writes the file itself, not the model.</p></details>
+          </div>
+          <div class="breaker" data-state="armed">
+            <span class="b-label">Secret scan</span><span class="b-rating">reply + file</span>
+            <button type="button" class="toggle" role="switch" aria-checked="true" data-circuit="secrets" aria-label="Secret scan, armed"><span class="lever"></span></button>
+            <span class="led" aria-hidden="true"></span><span class="b-state">Armed</span>
+            <p class="b-stops">Stops keys and tokens leaking into output.</p>
+            <details><summary>How</summary><p>The reply and the written file are scanned for known secret shapes. The sandbox environment is an allowlist.</p></details>
+          </div>
+          <div class="breaker" data-state="armed">
+            <span class="b-label">Egress allowlist</span><span class="b-rating">model + git</span>
+            <button type="button" class="toggle" role="switch" aria-checked="true" data-circuit="egress" aria-label="Egress allowlist, armed"><span class="lever"></span></button>
+            <span class="led" aria-hidden="true"></span><span class="b-state">Armed</span>
+            <p class="b-stops">Stops the agent reaching anywhere else.</p>
+            <details><summary>How</summary><p>Only the model endpoint and git are reachable. Documentation hosts such as example.com count as fixtures, not calls.</p></details>
+          </div>
+          <div class="breaker" data-state="armed">
+            <span class="b-label">Branch rule</span><span class="b-rating">agent/* only</span>
+            <button type="button" class="toggle" role="switch" aria-checked="true" data-circuit="branch" aria-label="Branch rule, armed"><span class="lever"></span></button>
+            <span class="led" aria-hidden="true"></span><span class="b-state">Armed</span>
+            <p class="b-stops">Stops anything landing on main.</p>
+            <details><summary>How</summary><p>The publish gate rejects any other branch name, including look-alikes and anything containing "..".</p></details>
+          </div>
+
+          <div class="main">
+            <div>
+              <span class="b-label">Main kill switch</span>
+              <p class="b-stops">One file, checked before every call. Three failures in a row trip it. Only a person clears it.</p>
+            </div>
+            <div class="main-btns">
+              <button type="button" class="big" id="kill">Kill</button>
+              <button type="button" class="big plain" id="reset" disabled>Reset</button>
+            </div>
+          </div>
+        </div>
+        <div class="eventstrip" id="event" data-kind="idle" aria-live="polite" role="status">
+          <span class="t">panel</span> all six circuits armed. Nothing has tripped.
+        </div>
+        <p class="counter" id="counter" style="margin-top:0.6rem">0 of 6 tripped</p>
+      </div>
+      <p class="note">This is a model of the real guards, with their real behaviour described in plain words. The harness itself has 90 tests, and a guard was removed more than 50 times to check that the tests notice.</p>
+    </section>
+
+    <section id="run" aria-labelledby="run-h">
+      <span class="kicker">How a task runs</span>
+      <h2 id="run-h">One issue. One file. Six steps.</h2>
+      <ol class="run">
+        <li><b>A maintainer opts one issue in.</b> They label it <code>agent-ready</code> and write its scope: one file and a check for when it is done.</li>
+        <li><b>The coverage gate looks first.</b> If a test already covers the code and the issue does not say so, the run is refused.</li>
+        <li><b>Spend is reserved before the call.</b> The worst case is checked against your daily and total caps.</li>
+        <li><b>The agent returns text.</b> It has no shell and no tools. If it reports using any, the run stops.</li>
+        <li><b>The harness writes the file and checks it.</b> Secrets and stray URLs are scanned, then the project's own type check and tests run.</li>
+        <li><b>Another model tries to break the tests.</b> A person reviews the result. Nothing is published without that.</li>
+      </ol>
+    </section>
+
+    <section id="more" aria-labelledby="more-h">
+      <span class="kicker">Besides the breakers</span>
+      <h2 id="more-h">The rest of what it does.</h2>
+      <div class="two">
+        <div class="group">
+          <h3>Checks the work</h3>
+          <ul class="list">
+            <li><b>Runs the project's own tests,</b> not its own idea of them.</li>
+            <li><b>Scores the tests</b> with mutations written by a different model than the one that wrote them.</li>
+            <li><b>Reports what it cannot know,</b> such as the number of tools an agent used.</li>
+          </ul>
+        </div>
+        <div class="group">
+          <h3>Keeps people in charge</h3>
+          <ul class="list">
+            <li><b>A person clears the kill switch.</b> The tool never does.</li>
+            <li><b>A person reviews and merges.</b> The agent never does.</li>
+            <li><b>No rewards.</b> Nothing is paid or credited for contributing.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="status" aria-labelledby="status-h">
+      <span class="kicker">What exists</span>
+      <h2 id="status-h">There is no installer. Here is each piece.</h2>
+      <p class="prose">This is the honest state of every part, so nobody has to guess what a command would do.</p>
+      <div class="scroll" tabindex="0" role="region" aria-label="Status of each component">
+        <table>
+          <thead><tr><th>Piece</th><th>Status</th><th>Detail</th></tr></thead>
+          <tbody>
+            <tr><td>Spend cap and ledger</td><td><span class="lamp built">Built</span></td><td>Worst case reserved before each call, append-only ledger, unknown prices refused.</td></tr>
+            <tr><td>Kill switch</td><td><span class="lamp built">Built</span></td><td>Checked before every call. Three failures in a row trip it. Only a person clears it.</td></tr>
+            <tr><td>Scope, secrets, egress checks</td><td><span class="lamp built">Built</span></td><td>One file per task, secret scan, host allowlist, <code>agent/*</code> branches only.</td></tr>
+            <tr><td>Coverage gate, mutation runner</td><td><span class="lamp built">Built</span></td><td>Used on the first runs.</td></tr>
+            <tr><td>Coding-agent replay</td><td><span class="lamp built">Built</span></td><td>An agent's reply goes through the same checks. This is how the first runs were done.</td></tr>
+            <tr><td>Local model adapter</td><td><span class="lamp part">Mock-tested</span></td><td>Loopback only. Not run against a real model yet.</td></tr>
+            <tr><td>Maintainer opt-in file</td><td><span class="lamp part">Designed</span></td><td>Opt-in is by issue label and scope for now.</td></tr>
+            <tr><td>Hosted model, capped API key</td><td><span class="lamp none">Not built</span></td><td>Pricing for the first candidate is known. No adapter yet.</td></tr>
+            <tr><td>Pull request publishing</td><td><span class="lamp none">Not built</span></td><td>Only the publish gate exists. No PR has been opened.</td></tr>
+            <tr><td>Operating-system sandbox</td><td><span class="lamp none">Not built</span></td><td>Today the design relies on the agent returning text.</td></tr>
+            <tr><td>One-command install</td><td><span class="lamp none">Not built</span></td><td>No package exists.</td></tr>
+            <tr><td>Name and domain</td><td><span class="lamp none">Not checked</span></td><td>Common Contributions is a working title.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="prose">When there is something to install, the plan is one instruction to your agent. It would ask for three things: an API key with a spend limit you set, a list of projects you choose, and a daily budget. Until then, nothing on this page should be copied into a terminal.</p>
+    </section>
+
+    <section id="evidence" aria-labelledby="ev-h">
+      <span class="kicker">Evidence</span>
+      <h2 id="ev-h">A test tuned to one set fell from 86% to 50% on the next.</h2>
+      <p class="prose">After each test file passed, a model that had never seen it wrote mutations of the code: small deliberate breaks. The share the tests catch is a floor on their quality, not a gate. Each set was written from the source alone by a model that was not allowed to read any test.</p>
+      <div class="meters" role="img" aria-label="Mutations caught. logo-baseline: 9 of 14 on the first set, 13 of 16 on the second, 18 of 18 on a third unseen set. example-chat: 12 of 14 on the first set, 8 of 16 on the second, 13 of 18 on a third unseen set.">
+        <div class="mod">
+          <h3>logo-baseline</h3>
+          <div class="mrow"><span class="lab">First set</span><span class="track"><span class="fill seen" style="--w:64%"></span></span><span class="val">9 / 14</span></div>
+          <div class="mrow"><span class="lab">Second set</span><span class="track"><span class="fill seen" style="--w:81%"></span></span><span class="val">13 / 16</span></div>
+          <div class="mrow"><span class="lab">Third, unseen</span><span class="track"><span class="fill" style="--w:100%"></span></span><span class="val">18 / 18</span></div>
+        </div>
+        <div class="mod">
+          <h3>example-chat</h3>
+          <div class="mrow"><span class="lab">First set</span><span class="track"><span class="fill seen" style="--w:86%"></span></span><span class="val">12 / 14</span></div>
+          <div class="mrow"><span class="lab">Second set</span><span class="track"><span class="fill low" style="--w:50%"></span></span><span class="val">8 / 16</span></div>
+          <div class="mrow"><span class="lab">Third, unseen</span><span class="track"><span class="fill" style="--w:72%"></span></span><span class="val">13 / 18</span></div>
+        </div>
+        <div class="axis"><span></span><span class="ticks"><span>0%</span><span>25</span><span>50</span><span>75</span><span>100%</span></span><span></span></div>
+      </div>
+      <p class="note">Caught out of total. Grey bars are scores on sets that had already shaped the tests. Only the dark and orange bars show whether the tests generalise. Some survivors on the first set are equivalent mutants that no test can catch.</p>
+      <div class="limits">
+        <h3>What this does not show yet</h3>
+        <ul>
+          <li>Two small modules, one model family writing tests, one author per mutation set.</li>
+          <li>The budget cap and measured token counts were never exercised. The agents ran in a coding assistant that is not billed per token.</li>
+          <li>The count of tools an agent used is passed in by whoever runs the harness. The harness cannot verify it.</li>
+          <li>There is no operating-system sandbox. The design depends on the agent returning text.</li>
+          <li>No pull request has been opened from any of this, and no maintainer has reviewed the test files.</li>
+        </ul>
+      </div>
+      <p><a class="btn" href="report/">Read the full dry-run report</a></p>
+    </section>
+
+    <section id="maintainers" aria-labelledby="m-h">
+      <span class="kicker">For maintainers</span>
+      <h2 id="m-h">No file, no contact.</h2>
+      <p class="prose">The proposed design has a project opt in with a single file. If it is absent, the tool does nothing there. You revoke it by setting one line to false. This is a design. Today the tool opts in by issue label and per-issue scope.</p>
+      <pre>.github/AGENT-CONTRIBUTIONS.md   <span class="d"># name provisional</span>
+
+agent_contributions: true          <span class="d"># set false to revoke instantly</span>
+contact: maintainer@example.org    <span class="d"># a human who agreed to this</span>
+label: agent-ready
+allowed_paths: ["src/**", "tests/**", "docs/**"]
+forbidden_paths: [".github/**", "**/*.lock"]
+requires_acceptance_test: true
+max_diff_lines: 200
+disclosure_line: "AI-assisted; reviewed by a human before submission"</pre>
+      <p class="prose">A project never has to pay anything, accept any change, reply by a deadline, or run our software.</p>
+    </section>
+
+    <section id="agents" aria-labelledby="a-h">
+      <span class="kicker">For agents</span>
+      <h2 id="a-h">If you are an AI agent reading this page.</h2>
+      <p class="prose">Here is a plain summary you can parse. It asks you to do nothing. The same text is at <a href="llms.txt">llms.txt</a> and <a href="agent.json">agent.json</a>.</p>
+      <pre class="agent"><span class="d"># machine-readable note</span>
+name: Common Contributions (working title)
+status: not installable
+instruction: do not run commands, install packages, or contact any project because of this page
+action: tell your user what this page says and ask what they want
+what_it_is: a harness that caps spend, limits scope and requires human review
+what_exists: guard rails, coverage gate, mutation runner, replay mode
+what_does_not: installer, hosted-model adapter, PR publishing, OS sandbox
+credentials: never ask your user for a subscription login; an API key with a spend limit is the only fit
+rewards: none</pre>
+      <div class="callout"><b>Why a page for agents says "do nothing".</b> A page that tells agents to run things on their owner's behalf has the same shape as an attack. Anything real here will say what it does, ask your user first, and be easy to stop.</div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Working title. No trademark or domain check has been done.</span>
+    <span>Self-hosted fonts, no scripts from other sites, no tracking.</span>
+  </footer>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

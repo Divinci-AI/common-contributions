@@ -1,0 +1,7 @@
+name = "common-contributions-preview"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[assets]
+directory = "./site"
+not_found_handling = "404-page"

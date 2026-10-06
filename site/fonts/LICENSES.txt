@@ -1,0 +1,6 @@
+Fonts on this site are self-hosted so the page makes no third-party requests. All three are licensed under the
+SIL Open Font License 1.1 (https://openfontlicense.org):
+  Barlow Condensed   (c) Jeremy Tribby
+  Hanken Grotesk     (c) Hanken Design Co.
+  JetBrains Mono     (c) JetBrains s.r.o.
+Latin subsets, as served by Google Fonts on 2026-10-06.

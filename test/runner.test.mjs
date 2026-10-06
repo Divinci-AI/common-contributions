@@ -65,7 +65,7 @@ test("a changed file outside the task's scope trips STOP", async () => {
 
 test("a URL in the output that is off the allowlist trips STOP", async () => {
   const w = world();
-  await assert.rejects(run(w, async () => ({ text: "fetch https://evil.example/x", files: { "t/a.test.ts": "x" } })), /outside the allowlist/);
+  await assert.rejects(run(w, async () => ({ text: "fetch https://evil-host.com/x", files: { "t/a.test.ts": "x" } })), /outside the allowlist/);
   assert.ok(w.kill.isStopped());
 });
 
@@ -130,4 +130,24 @@ test("assertPublishable: only agent/* branches, only in-scope files, never while
   assert.throws(() => assertPublishable({ ...ok, changedFiles: ["t/a.test.ts", "src/x.ts"] }), /outside scope/);
   assert.throws(() => w.kill.trip("x"));
   assert.throws(() => assertPublishable(ok), /STOP/);
+});
+
+test("a fixture URL on a reserved documentation host in the output does NOT trip STOP", async () => {
+  const w = world();
+  const r = await run(w, async () => ({ text: "", files: { "t/a.test.ts": 'const logoUrl = "https://example.com/logo.png"; const h = "http://localhost:3000/x"; const i = "https://api.foo.invalid/y";' } }));
+  assert.deepEqual(Object.keys(r.files), ["t/a.test.ts"]);
+  assert.equal(w.kill.isStopped(), false);
+});
+
+test("a lookalike of a reserved host in the output still trips STOP", async () => {
+  const w = world();
+  await assert.rejects(run(w, async () => ({ text: "", files: { "t/a.test.ts": 'fetch("https://example.com.evil.com/x")' } })), /outside the allowlist/);
+  assert.ok(w.kill.isStopped());
+});
+
+test("the reserved-host exemption never widens the AGENT'S fetch: guardedFetch still refuses example.com", async () => {
+  const w = world();
+  const f = guardedFetch({ allowlist: ALLOW, kill: w.kill, realFetch: async () => "ok" });
+  await assert.rejects(f("https://example.com/x"), /allowlist/);
+  assert.ok(w.kill.isStopped());
 });

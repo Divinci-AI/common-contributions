@@ -4,7 +4,7 @@
  * The agent is a plain async function — no model is wired in here.
  */
 import { BudgetExceededError } from "./budget.mjs";
-import { assertAllowedUrl, EgressDeniedError, urlsIn } from "./egress.mjs";
+import { assertAllowedUrl, EgressDeniedError, hostOf, isReservedTestHost, urlsIn } from "./egress.mjs";
 import { StopRequestedError } from "./killswitch.mjs";
 import { diffScopeViolations, isAgentBranch } from "./scope.mjs";
 import { scanForSecrets } from "./secrets.mjs";
@@ -51,6 +51,8 @@ export async function runTask({ task, agent, budget, kill, model, limits, allowl
   if (scanForSecrets(everything).length > 0) kill.trip(`secret-shaped string in the output of #${task.number}`);
 
   for (const url of urlsIn(everything)) {
+    // A reserved documentation/test host (example.com, *.invalid, localhost...) reaches nobody: a fixture, not a fetch.
+    if (isReservedTestHost(hostOf(url))) continue;
     try {
       assertAllowedUrl(url, allowlist);
     } catch {

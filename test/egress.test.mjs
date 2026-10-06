@@ -36,3 +36,14 @@ test("urlsIn finds every http(s) URL in text", () => {
   assert.deepEqual(urlsIn('see https://a.com/x and "http://b.org/y?q=1" end'), ["https://a.com/x", "http://b.org/y?q=1"]);
   assert.deepEqual(urlsIn("no links here"), []);
 });
+
+import { isReservedTestHost } from "../src/egress.mjs";
+
+test("isReservedTestHost: documentation, test and loopback names only", () => {
+  for (const ok of ["example.com", "www.example.org", "a.b.example.net", "foo.invalid", "thing.test", "localhost", "127.0.0.1", "::1", "[::1]", "my.example", "x.localhost"]) {
+    assert.ok(isReservedTestHost(ok), ok);
+  }
+  for (const bad of ["evil.com", "example.com.evil.com", "notexample.com", "myexample.com", "example.co", "github.com", "invalid.com", "test.com", "", null, undefined]) {
+    assert.ok(!isReservedTestHost(bad), String(bad));
+  }
+});

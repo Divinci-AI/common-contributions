@@ -38,3 +38,16 @@ export function assertAllowedUrl(url, allowlist) {
 export function urlsIn(text) {
   return [...String(text ?? "").matchAll(/https?:\/\/[^\s"'<>)\]]+/gi)].map((m) => m[0]);
 }
+
+/**
+ * Hosts that cannot reach anyone: IANA-reserved documentation and test names (RFC 2606 / RFC 6761) and loopback.
+ * A test fixture that says `https://example.com/logo.png` is not a network call. Used ONLY for URLs that merely APPEAR in
+ * an agent's output — never to widen what the agent's own fetch may reach (that stays the allowlist, strictly).
+ */
+export function isReservedTestHost(host) {
+  if (!host) return false;
+  const h = host.toLowerCase().replace(/^\[|\]$/g, "");
+  if (h === "localhost" || h === "127.0.0.1" || h === "::1") return true;
+  if (/(^|\.)example\.(com|org|net)$/.test(h)) return true;
+  return /\.(example|invalid|test|localhost)$/.test(h) || h === "example" || h === "invalid" || h === "test";
+}

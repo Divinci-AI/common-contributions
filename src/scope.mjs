@@ -44,6 +44,6 @@ export function isAgentBranch(name) {
 export function selectRunnableTasks(issues) {
   return issues
     .filter((i) => isOptedIn(i))
-    .map((i) => ({ number: i.number, title: i.title, allowed: allowedPaths(i.body) }))
+    .map((i) => ({ number: i.number, title: i.title, body: i.body, allowed: allowedPaths(i.body) }))
     .filter((t) => t.allowed.length > 0);
 }

@@ -11,14 +11,21 @@ Zero dependencies; plain Node >= 22.14 ESM; `npm test` uses the built-in runner.
 | `secrets.mjs` | Scans output and produced files for secret shapes (findings carry the KIND, never the text); the sandbox environment is an **allowlist** with `HOME` replaced. |
 | `egress.mjs` | Host allowlist (exact or `*.suffix`; never a bare `*`); the agent gets a `fetch` that trips STOP off-list. |
 | `scope.mjs` | Opt-in by the `agent-ready` label **and** a parseable "one file" scope; diff must stay inside it; publish only to `agent/*` branches (never main/preview). |
-| `runner.mjs` | The loop: reserve -> agent -> record -> scan secrets -> check URLs -> check scope. Any breach trips STOP. A refused budget stops the loop but does not trip STOP (it is the system working). |
+| `runner.mjs` | The loop: reserve -> agent -> record -> scan secrets -> check URLs -> check scope. Any breach trips STOP. A refused budget stops the loop but does not trip STOP (it is the system working). URLs in output on reserved documentation hosts (`example.com`, `*.invalid`, `localhost`...) are fixtures, not egress; the agent's own `fetch` stays strictly allowlisted. |
+| `coverage.mjs` | Finds every test file that IMPORTS a module (in Node, not grep). `run-one` refuses unless the issue names each existing test, and the prompt carries them. |
+| `mutate.mjs` | Runs mutations written by someone OTHER than the test's author: exactly-once patterns, byte-identical restore, and mutants that do not build are reported separately from "caught". |
+| `adapters/` | `ollama.mjs` (a local model, loopback only) and `replay.mjs` (an already-written reply, e.g. from a coding agent, put through the same checks; any non-zero or missing tool-use count refuses the run). |
 
 ```sh
-npm test                                   # 44 tests
+npm test                                   # 90 tests
 node src/cli.mjs status
 node src/cli.mjs stop "reason"
 node src/cli.mjs clear-stop --yes
 node src/cli.mjs dry-run issues.json       # STUB agent: no model, no network
+node src/cli.mjs coverage --repo R --module path/to/source.ts      # who already tests this module?
+node src/cli.mjs run-one issues.json 25 --repo R --model NAME --reply-file reply.txt --tool-uses 0   # replay
+node src/cli.mjs run-one issues.json 25 --repo R --model NAME --print-prompt                         # the exact prompt
+node src/cli.mjs mutate --repo R --source S --test T --cwd DIR --mutations muts.json                 # independent mutations
 ```
 State: `$COMMON_CONTRIBUTIONS_HOME` (default `~/.divinci/common-contributions`). Caps: `CC_MAX_USD_PER_DAY` (3), `CC_MAX_USD_TOTAL` (15).
 
@@ -28,8 +35,10 @@ State: `$COMMON_CONTRIBUTIONS_HOME` (default `~/.divinci/common-contributions`).
 - **No OS-level sandbox.** The agent is designed to *return file contents*, not run commands — the harness writes them.
   If an adapter ever hands the agent a shell, env scrubbing is not isolation; use a container/VM.
 - **No git/PR publishing.** Only the `assertPublishable` gate exists.
+- **`--tool-uses` is relayed by whoever runs the harness**, not measured by it: a replayed agent's tool count cannot be verified here.
 - **The secret scanner is pattern-based**; an unknown token shape passes. **Egress control covers the `fetch` it hands
   the agent and URLs in output, not the network stack.**
 - **The ledger is single-process:** two concurrent runners could both reserve against the same headroom.
-- Mutation-tested (21 guard removals, all caught) — that shows the tests pin the guards, not that the guards are
-  sufficient against a determined attacker.
+- Mutation-tested (40+ guard removals, all caught) — that shows the tests pin the guards, not that the guards are
+  sufficient against a determined attacker. A first real run also taught that a mutation score is a floor, not a gate:
+  a test file tuned against one mutation set fell from 86% to 50% on a held-out set written by a different author.

@@ -112,10 +112,11 @@ h2 { font-family: var(--font-display); font-weight: 700; text-transform: upperca
 @media (min-width: 48rem) { .two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 
 /* the run: a real sequence, so numbered terminals on a bus */
-ol.run { list-style: none; margin: 0; padding: 0 0 0 1.6rem; border-left: 3px solid var(--ink); max-width: 46rem; counter-reset: t; display: flex; flex-direction: column; gap: 1.1rem; }
-ol.run li { position: relative; counter-increment: t; }
-ol.run li::before { content: counter(t); position: absolute; left: -2.55rem; top: 0; width: 1.9rem; height: 1.9rem; border-radius: 50%; background: var(--ink); color: var(--bg); font-family: var(--font-mono); font-size: 0.8rem; display: grid; place-items: center; }
-ol.run b { font-weight: 700; }
+ol.run { list-style: none; margin: 0; padding: 0; counter-reset: t; display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0.9rem; }
+ol.run li { position: relative; counter-increment: t; background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 3.6rem 1.1rem 1.1rem; font-size: 0.97rem; line-height: 1.5; overflow: hidden; }
+ol.run li::before { content: "0" counter(t); position: absolute; left: 1.1rem; top: 0.8rem; font-family: var(--font-display); font-weight: 700; font-size: 2.4rem; line-height: 1; color: var(--trip-ink); letter-spacing: 0.02em; }
+ol.run li .ic { position: absolute; right: 1rem; top: 0.9rem; width: 2.1rem; height: 2.1rem; color: var(--muted); }
+ol.run b { font-weight: 700; display: block; margin-bottom: 0.25rem; }
 
 .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.8rem; }
 .list li { padding-left: 1rem; border-left: 3px solid var(--line); }
@@ -169,3 +170,36 @@ ul.finds { list-style: none; margin: 0; padding: 0; display: flex; flex-directio
 ul.finds li { padding-left: 1rem; border-left: 3px solid var(--line); }
 ul.finds b { font-weight: 700; }
 .crumb { font-family: var(--font-mono); font-size: 0.78rem; }
+
+/* path schematic: where a task is stopped */
+.flow { list-style: none; margin: 0 0 1.1rem; padding: 0.9rem 0.6rem; display: grid; grid-template-columns: 1fr; gap: 0; background: var(--panel-lo); border: 1px solid #000; border-radius: 8px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.7); }
+.stn { position: relative; display: grid; grid-template-columns: 1.4rem 1fr; column-gap: 0.8rem; align-items: center; padding: 0.42rem 0; min-width: 0; }
+.stn b { font-family: var(--font-display); font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; font-size: 1rem; color: var(--engrave); line-height: 1.05; }
+.stn i { grid-column: 2; font-style: normal; font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--engrave-dim); }
+.stn .dot { grid-row: 1 / span 2; justify-self: center; width: 0.9rem; height: 0.9rem; border-radius: 50%; background: var(--ok); box-shadow: 0 0 10px 1px var(--ok); position: relative; z-index: 1; }
+.stn.node .dot { border-radius: 3px; background: var(--engrave); box-shadow: 0 0 0 3px var(--panel-hi); }
+.stn:not(:last-child)::after { content: ""; position: absolute; left: 0.7rem; top: 50%; width: 3px; height: 100%; margin-left: -1.5px; background: linear-gradient(var(--ok) 0 50%, transparent 50% 100%) 0 0 / 3px 14px; opacity: 0.85; }
+.stn.dead { opacity: 0.38; }
+.stn.dead .dot { background: var(--engrave-dim); box-shadow: none; }
+.stn.dead:not(:last-child)::after, .stn.open:not(:last-child)::after { background: none; border-left: 2px dashed var(--engrave-dim); opacity: 0.4; width: 0; }
+.stn.open .dot { background: var(--trip); box-shadow: 0 0 12px 2px var(--trip); border-radius: 2px; }
+.stn.open b { color: var(--trip); }
+.stn.open i::before { content: "stopped here · "; color: var(--trip); }
+@media (prefers-reduced-motion: no-preference) {
+  .stn:not(.dead):not(.open):not(:last-child)::after { animation: flow-v 0.9s linear infinite; }
+  @keyframes flow-v { to { background-position: 0 14px; } }
+}
+@media (min-width: 58rem) {
+  .flow { grid-template-columns: repeat(9, minmax(0, 1fr)); padding: 1.1rem 0.8rem 0.9rem; }
+  .stn { grid-template-columns: 1fr; justify-items: center; text-align: center; padding: 0 0.2rem; row-gap: 0.25rem; }
+  .stn i { grid-column: 1; }
+  .stn .dot { grid-row: auto; margin-bottom: 0.2rem; }
+  .stn:not(:last-child)::after { left: 50%; top: 0.45rem; width: 100%; height: 3px; margin: -1.5px 0 0; background: linear-gradient(90deg, var(--ok) 0 50%, transparent 50% 100%) 0 0 / 14px 3px; }
+  .stn.dead:not(:last-child)::after, .stn.open:not(:last-child)::after { height: 0; width: 100%; border-left: 0; border-top: 2px dashed var(--engrave-dim); }
+  @media (prefers-reduced-motion: no-preference) {
+    .stn:not(.dead):not(.open):not(:last-child)::after { animation: flow-h 0.9s linear infinite; }
+    @keyframes flow-h { to { background-position: 14px 0; } }
+  }
+}
+@media (min-width: 40rem) { ol.run { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 58rem) { ol.run { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

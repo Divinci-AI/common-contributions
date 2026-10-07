@@ -48,6 +48,17 @@
           <span class="panel-title">Guard circuits · dry-run harness</span>
           <span class="panel-hint">Click a breaker to trip it. Click again to reset it. Resetting is a person's job.</span>
         </div>
+        <ol class="flow" id="flow" aria-hidden="true">
+          <li class="stn node"><span class="dot"></span><b>Issue</b><i>opted in</i></li>
+          <li class="stn gate" data-gate="coverage"><span class="dot"></span><b>Coverage</b><i>gate</i></li>
+          <li class="stn gate" data-gate="spend"><span class="dot"></span><b>Spend</b><i>cap</i></li>
+          <li class="stn gate" data-gate="egress"><span class="dot"></span><b>Egress</b><i>allowlist</i></li>
+          <li class="stn node"><span class="dot"></span><b>Agent</b><i>text only</i></li>
+          <li class="stn gate" data-gate="scope"><span class="dot"></span><b>One file</b><i>scope</i></li>
+          <li class="stn gate" data-gate="secrets"><span class="dot"></span><b>Secrets</b><i>scan</i></li>
+          <li class="stn gate" data-gate="branch"><span class="dot"></span><b>Branch</b><i>rule</i></li>
+          <li class="stn node"><span class="dot"></span><b>Pull request</b><i>a person reviews</i></li>
+        </ol>
         <div class="breakers" id="breakers">
           <div class="breaker" data-state="armed">
             <span class="b-label">Spend cap</span><span class="b-rating">$3 per day</span>
@@ -115,12 +126,12 @@
       <span class="kicker">How a task runs</span>
       <h2 id="run-h">One issue. One file. Six steps.</h2>
       <ol class="run">
-        <li><b>A maintainer opts one issue in.</b> They label it <code>agent-ready</code> and write its scope: one file and a check for when it is done.</li>
-        <li><b>The coverage gate looks first.</b> If a test already covers the code and the issue does not say so, the run is refused.</li>
-        <li><b>Spend is reserved before the call.</b> The worst case is checked against your daily and total caps.</li>
-        <li><b>The agent returns text.</b> It has no shell and no tools. If it reports using any, the run stops.</li>
-        <li><b>The harness writes the file and checks it.</b> Secrets and stray URLs are scanned, then the project's own type check and tests run.</li>
-        <li><b>Another model tries to break the tests.</b> A person reviews the result. Nothing is published without that.</li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h9l7 7-9 9-7-7z"/><circle cx="9" cy="9" r="1.4"/></svg><b>A maintainer opts one issue in.</b> They label it <code>agent-ready</code> and write its scope: one file and a check for when it is done.</li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></svg><b>The coverage gate looks first.</b> If a test already covers the code and the issue does not say so, the run is refused.</li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg><b>Spend is reserved before the call.</b> The worst case is checked against your daily and total caps.</li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h14M5 11h14M5 16h9"/></svg><b>The agent returns text.</b> It has no shell and no tools. If it reports using any, the run stops.</li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M9 13l2.5 2.5L16 11"/></svg><b>The harness writes the file and checks it.</b> Secrets and stray URLs are scanned, then the project's own type check and tests run.</li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><b>Another model tries to break the tests.</b> A person reviews the result. Nothing is published without that.</li>
       </ol>
     </section>
 

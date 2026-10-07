@@ -87,3 +87,9 @@ test("the page and the state machine agree on the circuit ids", () => {
   const inHtml = [...html.matchAll(/data-circuit="([a-z]+)"/g)].map((m) => m[1]);
   assert.deepEqual(inHtml.sort(), CIRCUITS.map((c) => c.id).sort(), "index.html data-circuit ids == CIRCUITS ids");
 });
+
+test("every guard appears exactly once as a gate on the path schematic", () => {
+  const html = readFileSync(new URL("../site/index.html", import.meta.url), "utf8");
+  const gates = [...html.matchAll(/data-gate="([a-z]+)"/g)].map((m) => m[1]);
+  assert.deepEqual([...gates].sort(), CIRCUITS.map((c) => c.id).sort());
+});

@@ -7,6 +7,7 @@ const strip = document.getElementById("event");
 const counter = document.getElementById("counter");
 const killBtn = document.getElementById("kill");
 const resetBtn = document.getElementById("reset");
+const stations = [...document.querySelectorAll("#flow .stn")];
 const buttons = [...document.querySelectorAll("[data-circuit]")];
 
 function render() {
@@ -20,6 +21,12 @@ function render() {
     card.dataset.state = open ? "tripped" : "armed";
     card.querySelector(".b-state").textContent = open ? "Tripped" : "Armed";
   }
+  // The task travels until the first tripped gate; everything past it goes dark.
+  const stop = stations.findIndex((s) => s.dataset.gate && panel.isTripped(s.dataset.gate));
+  stations.forEach((s, i) => {
+    s.classList.toggle("open", i === stop);
+    s.classList.toggle("dead", stop !== -1 && i > stop);
+  });
   counter.textContent = `${panel.trippedCount()} of ${CIRCUITS.length} tripped`;
   killBtn.disabled = panel.isMainTripped();
   resetBtn.disabled = !panel.isMainTripped();

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { CIRCUITS, LOCKED_EVENT, MAIN_EVENT, createPanel } from "../panel.js";
+import { CIRCUITS, LOCKED_EVENT, MAIN_EVENT, createPanel } from "../site/panel.js";
 
 test("every circuit names what it stops, what happens when it trips, and how it works", () => {
   for (const c of CIRCUITS) {
@@ -83,7 +83,7 @@ test("the copy never promises more than the harness does", () => {
 });
 
 test("the page and the state machine agree on the circuit ids", () => {
-  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const html = readFileSync(new URL("../site/index.html", import.meta.url), "utf8");
   const inHtml = [...html.matchAll(/data-circuit="([a-z]+)"/g)].map((m) => m[1]);
   assert.deepEqual(inHtml.sort(), CIRCUITS.map((c) => c.id).sort(), "index.html data-circuit ids == CIRCUITS ids");
 });

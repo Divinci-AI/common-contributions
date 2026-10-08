@@ -243,3 +243,9 @@ ol.run.four { margin-top: 1.4rem; }
 ol.run.four li::before { content: ""; }
 ol.run.four li { padding-top: 3.6rem; }
 ol.run.four li .ic { left: 1.1rem; right: auto; top: 0.9rem; width: 2.2rem; height: 2.2rem; color: var(--trip-ink); }
+.card.area { display: flex; flex-direction: column; gap: 0.5rem; }
+.card.area .tag { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.card.area b { margin-bottom: 0; font-size: 1.45rem; }
+.card.area .stat { margin-top: auto; padding-top: 0.7rem; border-top: 1px solid var(--line); font-size: 0.88rem; color: var(--ink); }
+.card.area.ask { border-style: dashed; }
+.card.area .stat .lamp { margin-right: 0.5rem; }

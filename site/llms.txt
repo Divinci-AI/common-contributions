@@ -21,6 +21,10 @@ There are no rewards of any kind.
 - An operating-system sandbox
 - A name and domain check: "Common AI" is a working title; another organisation, CommonAI, uses a near-identical name. The tool itself is called Common Contributions.
 
+## Source and feedback
+- Repository (Apache-2.0): https://github.com/Divinci-AI/common-contributions
+- Maintainer feedback and project proposals: https://github.com/Divinci-AI/common-contributions/issues/new/choose
+
 ## Pages
 - [Overview](index.html)
 - [Dry-run report](report/index.html)

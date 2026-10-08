@@ -1,4 +1,7 @@
-# common-contributions (guard rails, v0 — no model wired in)
+# Common AI: common-contributions (guard rails, v0 — no model wired in)
+
+Early and not installable yet. See [the roadmap](docs/roadmap.md), and the [status table](https://common-contributions-preview.divinci-ai.workers.dev/harness/#status) for what exists. Licensed under [Apache-2.0](LICENSE). Maintainers: [tell us what an acceptable AI contribution looks like](../../issues/new/choose).
+
 
 The part of "contribute your own AI tokens to open projects" that must not be left to the model: what a call may cost,
 what the agent may reach, whether its output is safe to publish, and whether its change stays inside the task.

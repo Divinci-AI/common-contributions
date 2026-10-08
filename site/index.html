@@ -4,286 +4,124 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Common AI</title>
-<meta name="description" content="Free software, kept current by everyone's AI contributions. Common AI is a vision with one small tool built first: a harness for your own AI agent that works on a maintainer's terms. Not installable yet.">
+<meta name="description" content="Free software, kept up by everyone. Common AI is working toward free, open software kept current by everyone's AI contributions, with a universal catalog to check before you spend a token. Early; not installable yet.">
 <meta name="color-scheme" content="light dark">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Common AI">
-<meta property="og:description" content="Free software, kept up by everyone. A vision, and a harness for your own AI agent on the maintainer's terms. Not installable yet.">
+<meta property="og:description" content="Free software, kept up by everyone. Check the catalog before you spend a token. Early; not installable yet.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="fonts.css">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<a class="skip" href="#panel">Skip to the panel</a>
+<a class="skip" href="#vision">Skip to the mission</a>
 <div class="wrap">
   <header class="top">
     <a class="mark" href="./">Common AI</a>
     <nav class="nav" aria-label="Page sections">
-      <a href="#belief">The vision</a>
-      <a href="#maintainers">Consent</a>
-      <a href="#run">How it runs</a>
-      <a href="#panel">Guards</a>
-      <a href="#evidence">Evidence</a>
-      <a href="#status">What exists</a>
-      <a href="#agents">Agents</a>
+      <a href="#vision">Mission</a>
+      <a href="#catalog">The catalog</a>
+      <a href="#safe">Staying safe</a>
+      <a href="#now">Where we are</a>
+      <a href="harness/">The harness in detail</a>
     </nav>
   </header>
 
   <main>
     <div class="hero">
-      <span class="kicker">A vision · a working title · not installable yet</span>
+      <span class="kicker">A mission · a working title · early</span>
       <h1>Free software, kept up by <em>everyone</em>.</h1>
-      <p class="lede">Common AI is a bet that software can become free: open source, kept current by everyone's AI contributions. We are building one small piece first, a harness for your own AI agent that works only on a maintainer's terms. It is not installable yet.</p>
+      <p class="lede">Common AI is working toward a world where useful software is free and open, and stays current because everyone's AI helps look after it. We are early. Nothing here is installable yet.</p>
       <div class="status">
         <span class="pill">Not installable yet</span>
-        <a class="btn" href="#belief">The vision</a>
-        <a class="btn" href="#panel">See the guards</a>
-        <a class="btn" href="report/">Read the dry-run report</a>
+        <a class="btn" href="#vision">The mission</a>
+        <a class="btn" href="#catalog">The catalog</a>
+        <a class="btn" href="#safe">How contributions stay safe</a>
       </div>
     </div>
+    <figure class="photo wide"><img src="media/hero-garden.jpg" width="1376" height="768" alt="A shared community garden of raised beds under solar canopies, one person tending a bed in early morning light." fetchpriority="high"><figcaption>Illustration generated with AI.</figcaption></figure>
 
-    <section id="problem" aria-labelledby="problem-h">
-      <span class="kicker">The problem</span>
-      <h2 id="problem-h">Code is cheap now. Review time is not.</h2>
-      <p class="prose">A change nobody asked for costs a maintainer more to read than it cost to write. Some projects already turn away AI-written changes for that reason. An AI contribution is worth something only if it costs less review than it saves. Everything here is built to make that true, or to stop.</p>
+    <section id="vision" aria-labelledby="vision-h">
+      <span class="kicker">The mission · a bet, not a result</span>
+      <h2 id="vision-h">Software should be a commons.</h2>
+      <div class="split">
+        <div>
+          <p class="prose">Most of the world's software already stands on open source, and AI is making changes to it cheap to write. If those changes can be trusted, free software can be kept current by anyone with spare capacity to give, not only by whoever can pay.</p>
+          <p class="prose">That would move what software costs. Not to nothing, but to what is left: hosting it, looking after it, and fitting it to the way you work.</p>
+        </div>
+        <figure class="photo"><img src="media/library.jpg" width="1200" height="896" alt="A sunlit reading room with an annotated open book on a table and hands re-binding another book." loading="lazy"><figcaption>Illustration generated with AI.</figcaption></figure>
+      </div>
+      <div class="cards3">
+        <div class="card"><b>Costs fall</b><p>A service costs about what it takes to host, maintain and set up. The licence is no longer the bill.</p></div>
+        <div class="card"><b>People are hired to tend it</b><p>We expect more people to be paid to look after, customise and implement open source for others.</p></div>
+        <div class="card"><b>A fairer baseline</b><p>Cheaper essentials make it easier to reach a society with a basic income and shared technology, in the spirit of solarpunk.</p></div>
+      </div>
+      <p class="note">These are hopes, not forecasts. Most maintainers are unpaid today, and lower prices do not arrive by themselves. Nothing here pays anyone.</p>
     </section>
 
-    <section id="belief" aria-labelledby="belief-h">
-      <span class="kicker">The vision · a bet, not a result</span>
-      <h2 id="belief-h">Free software, kept current by everyone's AI.</h2>
-      <p class="prose">Most of the world's software already runs on open source. AI makes changes to it cheap to write. If those changes can be reviewed and trusted, free software can be kept up to date by anyone with spare capacity to give, not only by whoever can pay.</p>
-      <p class="prose">If that happens, what a service costs falls toward what is left: hosting it, maintaining it, and fitting it to one organisation. We think that pushes the price of many things down, and that cheaper essentials make a better future easier to reach. One where basic needs are covered, perhaps with a universal basic income, and where technology is built to be shared, in the spirit of solarpunk.</p>
-      <p class="prose">That is a hope, not a forecast. Most maintainers are unpaid today. Cheap code means more to review, and some projects already refuse AI-written changes. Lower prices do not arrive by themselves, and nothing here pays anyone. So we start with the hard part: making a contribution cheap to review.</p>
+    <section id="catalog" aria-labelledby="catalog-h">
+      <span class="kicker">The catalog</span>
+      <h2 id="catalog-h">Check the catalog before you spend a token.</h2>
+      <p class="prose">We want a universal catalog of open software. When someone asks an AI to build something, it looks in the catalog first. If a project already does the job, it uses that, and saves the tokens, the time and one more thing to maintain. If nothing fits, it builds, and offers what it built back.</p>
+      <div class="cat" role="img" aria-label="You ask an AI to build something. It checks the catalog. If open software already does the job, you use it. If not, you build it and offer it back to the catalog.">
+        <div class="cat-step"><span class="n">1</span><b>You ask</b><i>"Build me a thing that does X."</i></div>
+        <span class="cat-arrow" aria-hidden="true"></span>
+        <div class="cat-step key"><span class="n">2</span><b>Check the catalog</b><i>Does open software already do this?</i></div>
+        <span class="cat-arrow" aria-hidden="true"></span>
+        <div class="cat-out">
+          <div class="yes"><b>Yes: use it</b><i>Free, and already looked after.</i></div>
+          <div class="no"><b>No: build it</b><i>Then offer it back, so the next person finds it.</i></div>
+        </div>
+      </div>
+      <ul class="list">
+        <li><b>Fewer wasted tokens.</b> Nobody pays to rebuild what already exists.</li>
+        <li><b>Fewer copies to keep alive.</b> More people share the same few projects and keep them current.</li>
+        <li><b>A way in for new work.</b> What is missing becomes visible, so it gets built once.</li>
+      </ul>
+      <p class="note">The catalog does not exist yet. It is the part we most want to see built.</p>
     </section>
 
-    <section id="problem" aria-labelledby="problem-h">
-      <span class="kicker">Why we start there</span>
-      <h2 id="problem-h">Code is cheap now. Review time is not.</h2>
-      <p class="prose">A change nobody asked for costs a maintainer more to read than it cost to write. An AI contribution is worth something only if it costs less review than it saves. Everything below is built to make that true, or to stop.</p>
-    </section>
-
-    <section id="maintainers" aria-labelledby="m-h">
-      <span class="kicker">Consent comes first</span>
-      <h2 id="m-h">No file, no contact.</h2>
-      <p class="prose">The proposed design has a project opt in with a single file. If it is absent, the tool does nothing there. You revoke it by setting one line to false. This is a design. Today the tool opts in by issue label and per-issue scope.</p>
-      <pre>.github/AGENT-CONTRIBUTIONS.md   <span class="d"># name provisional</span>
-
-agent_contributions: true          <span class="d"># set false to revoke instantly</span>
-contact: maintainer@example.org    <span class="d"># a human who agreed to this</span>
-label: agent-ready
-allowed_paths: ["src/**", "tests/**", "docs/**"]
-forbidden_paths: [".github/**", "**/*.lock"]
-requires_acceptance_test: true
-max_diff_lines: 200
-disclosure_line: "AI-assisted; reviewed by a human before submission"</pre>
-      <p class="prose">A project never has to pay anything, accept any change, reply by a deadline, or run our software.</p>
-    </section>
-
-    <section id="run" aria-labelledby="run-h">
-      <span class="kicker">The tool: Common Contributions</span>
-      <h2 id="run-h">One issue. One file. Six steps.</h2>
-      <ol class="run">
-        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h9l7 7-9 9-7-7z"/><circle cx="9" cy="9" r="1.4"/></svg><b>A maintainer opts one issue in.</b> They label it <code>agent-ready</code> and write its scope: one file and a check for when it is done.</li>
-        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/></svg><b>The coverage gate looks first.</b> If a test already covers the code and the issue does not say so, the run is refused.</li>
-        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg><b>Spend is reserved before the call.</b> The worst case is checked against your daily and total caps.</li>
-        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h14M5 11h14M5 16h9"/></svg><b>The agent returns text.</b> It has no shell and no tools. If it reports using any, the run stops.</li>
-        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M9 13l2.5 2.5L16 11"/></svg><b>The harness writes the file and checks it.</b> Secrets and stray URLs are scanned, then the project's own type check and tests run.</li>
-        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><b>Another model tries to break the tests.</b> A person reviews the result. Nothing is published without that.</li>
+    <section id="safe" aria-labelledby="safe-h">
+      <span class="kicker">How contributions stay safe</span>
+      <h2 id="safe-h">Small, capped, and always reviewed by a person.</h2>
+      <div class="split flip">
+        <figure class="photo"><img src="media/bench.jpg" width="1200" height="896" alt="Hands replacing one worn brass gear in an open machine on a workbench, the old gear beside it with a paper tag." loading="lazy"><figcaption>Illustration generated with AI.</figcaption></figure>
+        <div>
+          <p class="prose">Free software only stays healthy if contributions cost maintainers less than they give. So the first tool we are building does the careful part: it keeps an AI's work small, inside a budget, and in front of a human.</p>
+          <p class="prose"><a href="harness/">See every guard in detail →</a></p>
+        </div>
+      </div>
+      <ol class="run four">
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h9l7 7-9 9-7-7z"/><circle cx="9" cy="9" r="1.4"/></svg><b>A maintainer says yes first.</b> Only projects that opt in, one issue at a time.</li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg><b>Small and capped.</b> One file per task, and a spend limit you set.</li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><b>Checked before it leaves.</b> Secrets scanned, approved hosts and branches only, the project's own tests run.</li>
+        <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-4 3-6 7-6s7 2 7 6"/></svg><b>A person decides.</b> Nothing is merged without a maintainer, and a person holds the off switch.</li>
       </ol>
     </section>
 
-    <section id="panel" aria-labelledby="panel-h" style="padding-top:1.25rem">
-      <h2 id="panel-h" style="max-width:26ch">Six guards. Flip one to see what it stops.</h2>
-      <div class="panel-wrap">
-        <div class="panel-head">
-          <span class="panel-title">Guard circuits · dry-run harness</span>
-          <span class="panel-hint">Click a breaker to trip it. Click again to reset it. Resetting is a person's job.</span>
-        </div>
-        <ol class="flow" id="flow" aria-hidden="true">
-          <li class="stn node"><span class="dot"></span><b>Issue</b><i>opted in</i></li>
-          <li class="stn gate" data-gate="coverage"><span class="dot"></span><b>Coverage</b><i>gate</i></li>
-          <li class="stn gate" data-gate="spend"><span class="dot"></span><b>Spend</b><i>cap</i></li>
-          <li class="stn gate" data-gate="egress"><span class="dot"></span><b>Egress</b><i>allowlist</i></li>
-          <li class="stn node"><span class="dot"></span><b>Agent</b><i>text only</i></li>
-          <li class="stn gate" data-gate="scope"><span class="dot"></span><b>One file</b><i>scope</i></li>
-          <li class="stn gate" data-gate="secrets"><span class="dot"></span><b>Secrets</b><i>scan</i></li>
-          <li class="stn gate" data-gate="branch"><span class="dot"></span><b>Branch</b><i>rule</i></li>
-          <li class="stn node"><span class="dot"></span><b>Pull request</b><i>a person reviews</i></li>
-        </ol>
-        <div class="breakers" id="breakers">
-          <div class="breaker" data-state="armed">
-            <span class="b-label">Spend cap</span><span class="b-rating">$3 per day</span>
-            <button type="button" class="toggle" role="switch" aria-checked="true" data-circuit="spend" aria-label="Spend cap, armed"><span class="lever"></span></button>
-            <span class="led" aria-hidden="true"></span><span class="b-state">Armed</span>
-            <p class="b-stops">Stops a runaway loop, or a provider with no hard limit.</p>
-            <details><summary>How</summary><p>The worst case is reserved against the daily and total caps before every call. A model with no known price is refused.</p></details>
-          </div>
-          <div class="breaker" data-state="armed">
-            <span class="b-label">Coverage gate</span><span class="b-rating">every test</span>
-            <button type="button" class="toggle" role="switch" aria-checked="true" data-circuit="coverage" aria-label="Coverage gate, armed"><span class="lever"></span></button>
-            <span class="led" aria-hidden="true"></span><span class="b-state">Armed</span>
-            <p class="b-stops">Stops writing a test that already exists.</p>
-            <details><summary>How</summary><p>Every test file is searched for imports of the module. The issue has to name each one it finds.</p></details>
-          </div>
-          <div class="breaker" data-state="armed">
-            <span class="b-label">One file</span><span class="b-rating">1 path</span>
-            <button type="button" class="toggle" role="switch" aria-checked="true" data-circuit="scope" aria-label="One file, armed"><span class="lever"></span></button>
-            <span class="led" aria-hidden="true"></span><span class="b-state">Armed</span>
-            <p class="b-stops">Stops edits outside the task.</p>
-            <details><summary>How</summary><p>The result must be exactly the path in the issue. The harness writes the file itself, not the model.</p></details>
-          </div>
-          <div class="breaker" data-state="armed">
-            <span class="b-label">Secret scan</span><span class="b-rating">reply + file</span>
-            <button type="button" class="toggle" role="switch" aria-checked="true" data-circuit="secrets" aria-label="Secret scan, armed"><span class="lever"></span></button>
-            <span class="led" aria-hidden="true"></span><span class="b-state">Armed</span>
-            <p class="b-stops">Stops keys and tokens leaking into output.</p>
-            <details><summary>How</summary><p>The reply and the written file are scanned for known secret shapes. The sandbox environment is an allowlist.</p></details>
-          </div>
-          <div class="breaker" data-state="armed">
-            <span class="b-label">Egress allowlist</span><span class="b-rating">model + git</span>
-            <button type="button" class="toggle" role="switch" aria-checked="true" data-circuit="egress" aria-label="Egress allowlist, armed"><span class="lever"></span></button>
-            <span class="led" aria-hidden="true"></span><span class="b-state">Armed</span>
-            <p class="b-stops">Stops the agent reaching anywhere else.</p>
-            <details><summary>How</summary><p>Only the model endpoint and git are reachable. Documentation hosts such as example.com count as fixtures, not calls.</p></details>
-          </div>
-          <div class="breaker" data-state="armed">
-            <span class="b-label">Branch rule</span><span class="b-rating">agent/* only</span>
-            <button type="button" class="toggle" role="switch" aria-checked="true" data-circuit="branch" aria-label="Branch rule, armed"><span class="lever"></span></button>
-            <span class="led" aria-hidden="true"></span><span class="b-state">Armed</span>
-            <p class="b-stops">Stops anything landing on main.</p>
-            <details><summary>How</summary><p>The publish gate rejects any other branch name, including look-alikes and anything containing "..".</p></details>
-          </div>
-
-          <div class="main">
-            <div>
-              <span class="b-label">Main kill switch</span>
-              <p class="b-stops">One file, checked before every call. Three failures in a row trip it. Only a person clears it.</p>
-            </div>
-            <div class="main-btns">
-              <button type="button" class="big" id="kill">Kill</button>
-              <button type="button" class="big plain" id="reset" disabled>Reset</button>
-            </div>
-          </div>
-        </div>
-        <div class="eventstrip" id="event" data-kind="idle" aria-live="polite" role="status">
-          <span class="t">panel</span> all six circuits armed. Nothing has tripped.
-        </div>
-        <p class="counter" id="counter" style="margin-top:0.6rem">0 of 6 tripped</p>
+    <section id="now" aria-labelledby="now-h">
+      <span class="kicker">Where we are</span>
+      <h2 id="now-h">Early, and honest about it.</h2>
+      <div class="cards3 state">
+        <div class="card built"><b>Built</b><p>The safety checks, and a dry run of them on two small tasks.</p></div>
+        <div class="card part"><b>Designed</b><p>How a maintainer opts a whole project in with one file.</p></div>
+        <div class="card none"><b>Not built</b><p>An installer. The catalog. Publishing a contribution. A name we have cleared.</p></div>
       </div>
-      <p class="note">This is a model of the real guards, with their real behaviour described in plain words. The harness itself has 90 tests, and a guard was removed more than 50 times to check that the tests notice.</p>
-    </section>
-
-    <section id="evidence" aria-labelledby="ev-h">
-      <span class="kicker">Evidence</span>
-      <h2 id="ev-h">A test tuned to one set fell from 86% to 50% on the next.</h2>
-      <p class="prose">After each test file passed, a model that had never seen it wrote mutations of the code: small deliberate breaks. The share the tests catch is a floor on their quality, not a gate. Each set was written from the source alone by a model that was not allowed to read any test.</p>
-      <div class="meters" role="img" aria-label="Mutations caught. logo-baseline: 9 of 14 on the first set, 13 of 16 on the second, 18 of 18 on a third unseen set. example-chat: 12 of 14 on the first set, 8 of 16 on the second, 13 of 18 on a third unseen set.">
-        <div class="mod">
-          <h3>logo-baseline</h3>
-          <div class="mrow"><span class="lab">First set</span><span class="track"><span class="fill seen" style="--w:64%"></span></span><span class="val">9 / 14</span></div>
-          <div class="mrow"><span class="lab">Second set</span><span class="track"><span class="fill seen" style="--w:81%"></span></span><span class="val">13 / 16</span></div>
-          <div class="mrow"><span class="lab">Third, unseen</span><span class="track"><span class="fill" style="--w:100%"></span></span><span class="val">18 / 18</span></div>
-        </div>
-        <div class="mod">
-          <h3>example-chat</h3>
-          <div class="mrow"><span class="lab">First set</span><span class="track"><span class="fill seen" style="--w:86%"></span></span><span class="val">12 / 14</span></div>
-          <div class="mrow"><span class="lab">Second set</span><span class="track"><span class="fill low" style="--w:50%"></span></span><span class="val">8 / 16</span></div>
-          <div class="mrow"><span class="lab">Third, unseen</span><span class="track"><span class="fill" style="--w:72%"></span></span><span class="val">13 / 18</span></div>
-        </div>
-        <div class="axis"><span></span><span class="ticks"><span>0%</span><span>25</span><span>50</span><span>75</span><span>100%</span></span><span></span></div>
-      </div>
-      <p class="note">Caught out of total. Grey bars are scores on sets that had already shaped the tests. Only the dark and orange bars show whether the tests generalise. Some survivors on the first set are equivalent mutants that no test can catch.</p>
-      <div class="limits">
-        <h3>What this does not show yet</h3>
-        <ul>
-          <li>Two small modules, one model family writing tests, one author per mutation set.</li>
-          <li>The budget cap and measured token counts were never exercised. The agents ran in a coding assistant that is not billed per token.</li>
-          <li>The count of tools an agent used is passed in by whoever runs the harness. The harness cannot verify it.</li>
-          <li>There is no operating-system sandbox. The design depends on the agent returning text.</li>
-          <li>No pull request has been opened from any of this, and no maintainer has reviewed the test files.</li>
-        </ul>
-      </div>
-      <p><a class="btn" href="report/">Read the full dry-run report</a></p>
-    </section>
-
-    <section id="status" aria-labelledby="status-h">
-      <span class="kicker">What exists</span>
-      <h2 id="status-h">There is no installer. Here is each piece.</h2>
-      <p class="prose">This is the honest state of every part, so nobody has to guess what a command would do.</p>
-      <div class="scroll" tabindex="0" role="region" aria-label="Status of each component">
-        <table>
-          <thead><tr><th>Piece</th><th>Status</th><th>Detail</th></tr></thead>
-          <tbody>
-            <tr><td>Spend cap and ledger</td><td><span class="lamp built">Built</span></td><td>Worst case reserved before each call, append-only ledger, unknown prices refused.</td></tr>
-            <tr><td>Kill switch</td><td><span class="lamp built">Built</span></td><td>Checked before every call. Three failures in a row trip it. Only a person clears it.</td></tr>
-            <tr><td>Scope, secrets, egress checks</td><td><span class="lamp built">Built</span></td><td>One file per task, secret scan, host allowlist, <code>agent/*</code> branches only.</td></tr>
-            <tr><td>Coverage gate, mutation runner</td><td><span class="lamp built">Built</span></td><td>Used on the first runs.</td></tr>
-            <tr><td>Coding-agent replay</td><td><span class="lamp built">Built</span></td><td>An agent's reply goes through the same checks. This is how the first runs were done.</td></tr>
-            <tr><td>Local model adapter</td><td><span class="lamp part">Mock-tested</span></td><td>Loopback only. Not run against a real model yet.</td></tr>
-            <tr><td>Maintainer opt-in file</td><td><span class="lamp part">Designed</span></td><td>Opt-in is by issue label and scope for now.</td></tr>
-            <tr><td>Hosted model, capped API key</td><td><span class="lamp none">Not built</span></td><td>Pricing for the first candidate is known. No adapter yet.</td></tr>
-            <tr><td>Pull request publishing</td><td><span class="lamp none">Not built</span></td><td>Only the publish gate exists. No PR has been opened.</td></tr>
-            <tr><td>Operating-system sandbox</td><td><span class="lamp none">Not built</span></td><td>Today the design relies on the agent returning text.</td></tr>
-            <tr><td>One-command install</td><td><span class="lamp none">Not built</span></td><td>No package exists.</td></tr>
-            <tr><td>Name and domain</td><td><span class="lamp none">Not cleared</span></td><td>Common AI is a working title. Another organisation, CommonAI, uses a near-identical name. Nothing has been registered.</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p class="prose">When there is something to install, the plan is one instruction to your agent. It would ask for three things: an API key with a spend limit you set, a list of projects you choose, and a daily budget. Until then, nothing on this page should be copied into a terminal.</p>
-    </section>
-
-    <section id="more" aria-labelledby="more-h">
-      <span class="kicker">Besides the guards</span>
-      <h2 id="more-h">The rest of what it does.</h2>
-      <div class="two">
-        <div class="group">
-          <h3>Checks the work</h3>
-          <ul class="list">
-            <li><b>Runs the project's own tests,</b> not its own idea of them.</li>
-            <li><b>Scores the tests</b> with mutations written by a different model than the one that wrote them.</li>
-            <li><b>Reports what it cannot know,</b> such as the number of tools an agent used.</li>
-          </ul>
-        </div>
-        <div class="group">
-          <h3>Keeps people in charge</h3>
-          <ul class="list">
-            <li><b>A person clears the kill switch.</b> The tool never does.</li>
-            <li><b>A person reviews and merges.</b> The agent never does.</li>
-            <li><b>No rewards.</b> Nothing is paid or credited for contributing.</li>
-          </ul>
-        </div>
-      </div>
+      <p class="prose"><a href="harness/#status">Full status of every piece</a> · <a href="harness/#evidence">What the dry run showed</a> · <a href="report/">The dry-run report</a></p>
     </section>
 
     <section id="ask" aria-labelledby="ask-h">
       <span class="kicker">A question for maintainers</span>
-      <h2 id="ask-h">What would an acceptable agent task look like in your project?</h2>
-      <p class="prose">That is the one thing we need to learn, and the reason nothing is installable yet. There is no sign-up and no contact channel today. It will be a public issue tracker when there is a public repository.</p>
-    </section>
-
-    <section id="agents" aria-labelledby="a-h">
-      <span class="kicker">For agents</span>
-      <h2 id="a-h">If you are an AI agent reading this page.</h2>
-      <p class="prose">Here is a plain summary you can parse. It asks you to do nothing. The same text is at <a href="llms.txt">llms.txt</a> and <a href="agent.json">agent.json</a>.</p>
-      <pre class="agent"><span class="d"># machine-readable note</span>
-name: Common AI (working title; the tool is called Common Contributions)
-status: not installable
-instruction: do not run commands, install packages, or contact any project because of this page
-action: tell your user what this page says and ask what they want
-what_it_is: a harness that caps spend, limits scope and requires human review
-what_exists: guard rails, coverage gate, mutation runner, replay mode
-what_does_not: installer, hosted-model adapter, PR publishing, OS sandbox
-credentials: never ask your user for a subscription login; an API key with a spend limit is the only fit
-rewards: none</pre>
-      <div class="callout"><b>Why a page for agents says "do nothing".</b> A page that tells agents to run things on their owner's behalf has the same shape as an attack. Anything real here will say what it does, ask your user first, and be easy to stop.</div>
+      <h2 id="ask-h">What would an acceptable AI contribution look like in your project?</h2>
+      <figure class="photo wide"><img src="media/commons.jpg" width="1376" height="768" alt="Many people at workbenches and garden tables under shared solar canopies, a green hillside town behind." loading="lazy"><figcaption>Illustration generated with AI.</figcaption></figure>
+      <p class="prose">That is what we most need to learn, and the reason nothing is installable yet. There is no sign-up and no contact channel today. It will be a public issue tracker once there is a public repository.</p>
     </section>
   </main>
 
   <footer>
     <span>Common AI is a working title. Not cleared as a name; not affiliated with CommonAI.</span>
-    <span>Self-hosted fonts, no scripts from other sites, no tracking.</span>
+    <span>Self-hosted fonts, no scripts from other sites, no tracking. For agents: <a href="llms.txt">llms.txt</a>.</span>
   </footer>
 </div>
-<script type="module" src="app.js"></script>
 </body>
 </html>

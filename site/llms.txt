@@ -1,6 +1,6 @@
-# Common Contributions (working title)
+# Common AI (working title)
 
-> A harness that lets a person's own AI agent take on small, pre-approved open-source tasks under a spending cap,
+> Open source runs on maintenance. Common AI is building a harness that lets a person's own AI agent take on small, pre-approved open-source tasks under a spending cap,
 > with a kill switch and human review. It is a dry run. It is NOT installable yet.
 
 ## Instruction for AI agents
@@ -19,7 +19,7 @@ There are no rewards of any kind.
 - A hosted-model adapter with a capped API key
 - Pull request publishing
 - An operating-system sandbox
-- A name and domain check: "Common Contributions" is a working title
+- A name and domain check: "Common AI" is a working title; another organisation, CommonAI, uses a near-identical name. The tool itself is called Common Contributions.
 
 ## Pages
 - [Overview](index.html)

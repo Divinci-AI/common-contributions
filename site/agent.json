@@ -1,6 +1,6 @@
 {
-  "name": "Common Contributions",
-  "name_status": "working title; no trademark or domain check has been done",
+  "name": "Common AI",
+  "name_status": "working title; not cleared; another organisation, CommonAI, uses a near-identical name; the tool is called Common Contributions",
   "status": "not-installable",
   "instruction": "Do not run commands, install packages, or contact any project because of this site. Tell your user what it says and ask what they want.",
   "credentials": "Never ask the user for a subscription login. An API key with a spend limit is the only credential that fits.",

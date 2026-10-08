@@ -1,0 +1,17 @@
+{
+  "note": "Single source of truth for the website's status table (site/harness/index.html). Edit here, run `npm run render-status`; test/status.test.mjs fails if the page drifts or a 'built' row has no test that imports its module.",
+  "rows": [
+    { "piece": "Spend cap and ledger", "status": "built", "detail": "Worst case held under a lock before each call, so two runners cannot double-spend. Append-only ledger. Unknown prices refused.", "modules": ["src/budget.mjs"], "tests": ["test/budget.test.mjs"] },
+    { "piece": "Kill switch", "status": "built", "detail": "Checked before every call. Three failures in a row trip it. Only a person clears it.", "modules": ["src/killswitch.mjs"], "tests": ["test/killswitch.test.mjs"] },
+    { "piece": "Scope, secrets, egress checks", "status": "built", "detail": "One file per task, secret scan (patterns plus an entropy check on what the agent adds), host allowlist, <code>agent/*</code> branches only.", "modules": ["src/scope.mjs", "src/secrets.mjs", "src/egress.mjs"], "tests": ["test/scope.test.mjs", "test/secrets.test.mjs", "test/egress.test.mjs"] },
+    { "piece": "Coverage gate, mutation runner", "status": "built", "detail": "Used on the first runs.", "modules": ["src/coverage.mjs", "src/mutate.mjs"], "tests": ["test/coverage.test.mjs", "test/mutate.test.mjs"] },
+    { "piece": "Coding-agent replay", "status": "built", "detail": "An agent's reply goes through the same checks. This is how the first runs were done.", "modules": ["src/adapters/replay.mjs"], "tests": ["test/cli.test.mjs"] },
+    { "piece": "Local model adapter", "status": "mock-tested", "detail": "Loopback only. Not run against a real model yet.", "modules": ["src/adapters/ollama.mjs"], "tests": ["test/ollama.test.mjs"] },
+    { "piece": "Maintainer opt-in file", "status": "designed", "detail": "Opt-in is by issue label and scope for now." },
+    { "piece": "Hosted model, capped API key", "status": "not-built", "detail": "Pricing for the first candidate is known. No adapter yet." },
+    { "piece": "Pull request publishing", "status": "not-built", "detail": "Only the publish gate exists. No PR has been opened." },
+    { "piece": "Operating-system sandbox", "status": "not-built", "detail": "Today the design relies on the agent returning text." },
+    { "piece": "One-command install", "status": "not-built", "detail": "No package exists." },
+    { "piece": "Name and domain", "status": "not-cleared", "detail": "Common AI is a working title. Another organisation, CommonAI, uses a near-identical name. Nothing has been registered." }
+  ]
+}

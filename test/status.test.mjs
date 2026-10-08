@@ -1,0 +1,51 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { basename } from "node:path";
+import { STATUSES, spliceStatus } from "../scripts/render-status.mjs";
+
+const root = new URL("../", import.meta.url);
+const read = (p) => readFileSync(new URL(p, root), "utf8");
+const { rows } = JSON.parse(read("status.json"));
+
+test("the status table on the page is exactly what status.json renders (no drift)", () => {
+  const html = read("site/harness/index.html");
+  assert.equal(spliceStatus(html, rows), html, "run `npm run render-status`");
+});
+
+test("every row has a known status and a piece name", () => {
+  for (const r of rows) {
+    assert.ok(STATUSES[r.status], `unknown status for "${r.piece}"`);
+    assert.ok(r.piece && r.detail, "piece and detail are required");
+  }
+  assert.equal(new Set(rows.map((r) => r.piece)).size, rows.length, "piece names are unique");
+});
+
+test("a 'built' or 'mock-tested' row names modules that exist and tests that exist and mention each module", () => {
+  for (const r of rows.filter((x) => x.status === "built" || x.status === "mock-tested")) {
+    assert.ok(r.modules?.length, `"${r.piece}" claims ${r.status} but names no module`);
+    assert.ok(r.tests?.length, `"${r.piece}" claims ${r.status} but names no test`);
+    for (const m of r.modules) assert.ok(existsSync(new URL(m, root)), `${m} does not exist`);
+    const testSource = r.tests.map((t) => {
+      assert.ok(existsSync(new URL(t, root)), `${t} does not exist`);
+      return read(t);
+    }).join("\n");
+    for (const m of r.modules) {
+      const name = basename(m).replace(/\.mjs$/, "");
+      assert.ok(testSource.includes(name), `no listed test mentions "${name}" for "${r.piece}"`);
+    }
+  }
+});
+
+test("a row that is not built does not point at a module (it would be claiming something exists)", () => {
+  for (const r of rows.filter((x) => !["built", "mock-tested"].includes(x.status))) {
+    assert.ok(!r.modules?.length, `"${r.piece}" is ${r.status} but lists modules`);
+  }
+});
+
+test("the homepage does not claim to have built what status.json says is not built", () => {
+  const home = read("site/index.html");
+  const notBuilt = rows.filter((r) => r.status === "not-built").map((r) => r.piece);
+  assert.ok(notBuilt.length > 0);
+  assert.ok(/Not built/.test(home) && /installer/i.test(home), "the 'where we are' card lists what is not built");
+});

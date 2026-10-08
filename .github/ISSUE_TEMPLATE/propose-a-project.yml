@@ -1,0 +1,36 @@
+name: Propose a project
+description: Suggest an open source or open science project that could use AI help, on its maintainers' terms.
+title: "[proposal] "
+labels: ["proposal"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A proposal is a suggestion, not a listing. A project appears on the site only after its own maintainers agree, in writing.
+        There is no payment, and no sponsored listings exist today. If they ever do, they will be labelled as sponsored.
+  - type: input
+    id: project
+    attributes:
+      label: Project and link
+    validations: { required: true }
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options: ["Open source software", "Open science / research software", "Other"]
+    validations: { required: true }
+  - type: dropdown
+    id: relationship
+    attributes:
+      label: Your relationship to it
+      options: ["I maintain it", "I contribute to it", "I use it", "None"]
+    validations: { required: true }
+  - type: textarea
+    id: work
+    attributes:
+      label: Work an AI could do that a person can check
+      description: Tests, docs, data cleaning, replication checks. Small and well scoped.
+  - type: input
+    id: policy
+    attributes:
+      label: Link to the project's AI contribution policy, if it has one

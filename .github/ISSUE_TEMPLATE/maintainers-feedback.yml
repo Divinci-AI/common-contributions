@@ -1,0 +1,26 @@
+name: Maintainer feedback
+description: What would an acceptable AI contribution look like in your project?
+title: "[maintainer] "
+labels: ["maintainer-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the one thing we most need to learn. There is no sign-up and nothing is installed anywhere because of this issue.
+        We will not open pull requests against your project unless you ask us to, in writing, for a task you describe.
+  - type: input
+    id: project
+    attributes:
+      label: Project
+      description: Name and link. Say if you are not a maintainer.
+    validations: { required: true }
+  - type: textarea
+    id: acceptable
+    attributes:
+      label: What would an acceptable AI-assisted contribution look like?
+      description: Size, kind of change, disclosure, who reviews, what makes you close one.
+    validations: { required: true }
+  - type: textarea
+    id: never
+    attributes:
+      label: What should never happen?

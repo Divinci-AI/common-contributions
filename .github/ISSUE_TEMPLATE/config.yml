@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: What this is, and what is not built yet
+    url: https://github.com/Divinci-AI/common-contributions#readme
+    about: Nothing here is installable yet. Please read the status table before filing.

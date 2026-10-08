@@ -185,9 +185,10 @@ disclosure_line: "AI-assisted; reviewed by a human before submission"</pre>
         <table>
           <thead><tr><th>Piece</th><th>Status</th><th>Detail</th></tr></thead>
           <tbody>
-            <tr><td>Spend cap and ledger</td><td><span class="lamp built">Built</span></td><td>Worst case reserved before each call, append-only ledger, unknown prices refused.</td></tr>
+            <!-- status:start -->
+            <tr><td>Spend cap and ledger</td><td><span class="lamp built">Built</span></td><td>Worst case held under a lock before each call, so two runners cannot double-spend. Append-only ledger. Unknown prices refused.</td></tr>
             <tr><td>Kill switch</td><td><span class="lamp built">Built</span></td><td>Checked before every call. Three failures in a row trip it. Only a person clears it.</td></tr>
-            <tr><td>Scope, secrets, egress checks</td><td><span class="lamp built">Built</span></td><td>One file per task, secret scan, host allowlist, <code>agent/*</code> branches only.</td></tr>
+            <tr><td>Scope, secrets, egress checks</td><td><span class="lamp built">Built</span></td><td>One file per task, secret scan (patterns plus an entropy check on what the agent adds), host allowlist, <code>agent/*</code> branches only.</td></tr>
             <tr><td>Coverage gate, mutation runner</td><td><span class="lamp built">Built</span></td><td>Used on the first runs.</td></tr>
             <tr><td>Coding-agent replay</td><td><span class="lamp built">Built</span></td><td>An agent's reply goes through the same checks. This is how the first runs were done.</td></tr>
             <tr><td>Local model adapter</td><td><span class="lamp part">Mock-tested</span></td><td>Loopback only. Not run against a real model yet.</td></tr>
@@ -197,6 +198,7 @@ disclosure_line: "AI-assisted; reviewed by a human before submission"</pre>
             <tr><td>Operating-system sandbox</td><td><span class="lamp none">Not built</span></td><td>Today the design relies on the agent returning text.</td></tr>
             <tr><td>One-command install</td><td><span class="lamp none">Not built</span></td><td>No package exists.</td></tr>
             <tr><td>Name and domain</td><td><span class="lamp none">Not cleared</span></td><td>Common AI is a working title. Another organisation, CommonAI, uses a near-identical name. Nothing has been registered.</td></tr>
+            <!-- status:end -->
           </tbody>
         </table>
       </div>

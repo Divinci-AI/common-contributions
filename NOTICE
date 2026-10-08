@@ -1,0 +1,8 @@
+Common AI (common-contributions)
+Copyright 2026 Divinci AI contributors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Not covered by that grant:
+- site/media/*.jpg are AI-generated illustrations (Nano Banana 2, through Meshy). Their licensing follows the generator's terms.
+- site/fonts/* are third-party fonts under their own licences (see site/fonts/LICENSES.txt).

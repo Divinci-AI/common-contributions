@@ -57,7 +57,7 @@ export function extractCodeBlock(text) {
   return m ? m[1].replace(/\s+$/, "") + "\n" : null;
 }
 
-export function makeOllamaAgent({ host = "http://127.0.0.1:11434", sourceFiles, styleExample, modelName }) {
+export function makeOllamaAgent({ host = "http://127.0.0.1:11434", sourceFiles, styleExample, modelName, existingTests }) {
   return async function ollamaAgent({ task, model, limits, fetch }) {
     const res = await fetch(`${host}/api/chat`, {
       method: "POST",
@@ -67,7 +67,7 @@ export function makeOllamaAgent({ host = "http://127.0.0.1:11434", sourceFiles, 
         model: modelName ?? model,
         stream: false,
         options: { temperature: 0, num_predict: limits.maxOutputTokens },
-        messages: buildMessages({ task, sourceFiles, styleExample }),
+        messages: buildMessages({ task, sourceFiles, styleExample, existingTests }),
       }),
     });
     if (!res.ok) throw new Error(`ollama answered HTTP ${res.status}`);

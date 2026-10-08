@@ -14,6 +14,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs
 import { homedir } from "node:os";
 import { join, basename, dirname } from "node:path";
 import { Budget, LOCAL_MODEL_PRICE } from "./budget.mjs";
+import { WORKERS_AI_PRICES, makeWorkersAiAgent } from "./adapters/workersai.mjs";
 import { defaultStateDir } from "./paths.mjs";
 import { KillSwitch } from "./killswitch.mjs";
 import { runLoop, runTask } from "./runner.mjs";
@@ -67,9 +68,11 @@ if (cmd === "status") {
   const host = flag("--host", "http://127.0.0.1:11434");
   if (!issuesFile || !numberArg || !repo || !modelName) { console.error("usage: run-one <issues.json> <issueNumber> --repo <dir> --model <name>"); process.exit(2); }
   const replyFile = flag("--reply-file");
+  const provider = flag("--provider", "ollama"); // "ollama" (local, $0) | "workers-ai" (hosted, capped by the ledger)
+  if (!["ollama", "workers-ai"].includes(provider)) { console.error(`unknown --provider "${provider}"`); process.exit(2); }
   const hostName = new URL(host).hostname;
   // A replayed reply needs no network at all; a live local model must be loopback.
-  if (!replyFile && !["127.0.0.1", "localhost", "::1", "[::1]"].includes(hostName)) { console.error(`refusing: run-one is for a LOCAL model; host "${hostName}" is not loopback`); process.exit(2); }
+  if (!replyFile && provider === "ollama" && !["127.0.0.1", "localhost", "::1", "[::1]"].includes(hostName)) { console.error(`refusing: the ollama provider is for a LOCAL model; host "${hostName}" is not loopback`); process.exit(2); }
 
   const task = selectRunnableTasks(JSON.parse(readFileSync(issuesFile, "utf8"))).find((t) => String(t.number) === String(numberArg));
   if (!task) { console.error(`issue #${numberArg} is not runnable (needs the agent-ready label and a parseable one-file scope)`); process.exit(2); }
@@ -102,8 +105,16 @@ if (cmd === "status") {
     process.exit(0);
   }
 
-  const model = replyFile ? `claude-code:${modelName}` : `ollama:${modelName}`;
-  const localBudget = new Budget({ ledgerFile: join(stateDir, "ledger.jsonl"), maxUsdPerDay: 0, maxUsdTotal: 0, prices: { [model]: LOCAL_MODEL_PRICE } });
+  const hosted = provider === "workers-ai" && !replyFile;
+  const model = replyFile ? `claude-code:${modelName}` : hosted ? `workers-ai:${modelName}` : `ollama:${modelName}`;
+  // Local and replayed runs cost $0 and are never refused by the cap. A hosted run is priced from the published table and capped by the
+  // same caps as everything else (CC_MAX_USD_PER_DAY default 3, CC_MAX_USD_TOTAL default 15) against the SAME ledger file.
+  const localBudget = new Budget({
+    ledgerFile: join(stateDir, "ledger.jsonl"),
+    maxUsdPerDay: hosted ? Number(process.env.CC_MAX_USD_PER_DAY ?? 3) : 0,
+    maxUsdTotal: hosted ? Number(process.env.CC_MAX_USD_TOTAL ?? 15) : 0,
+    prices: hosted ? WORKERS_AI_PRICES : { [model]: LOCAL_MODEL_PRICE },
+  });
   // A replayed reply came from an agent that had tools. The design is "text in, text out": if it reports ANY tool
   // use, the run is refused and STOP is tripped — we cannot vouch for what a tool-using agent did to the machine.
   const toolUses = flag("--tool-uses");
@@ -114,9 +125,15 @@ if (cmd === "status") {
   if (replyFile && toolUses === undefined) { console.error("refusing: a replayed reply must say how many tools the agent used (--tool-uses N)"); process.exit(2); }
   const tokens = flag("--tokens"); // "in,out" as reported by the caller for a replayed reply (informational; $0)
   const reported = tokens ? { inputTokens: Number(tokens.split(",")[0]), outputTokens: Number(tokens.split(",")[1]) } : undefined;
+  // The account id and token come from the environment (e.g. `infisical run`); only these two are read, and neither is ever printed.
+  const accountId = process.env.CC_WORKERS_AI_ACCOUNT_ID ?? process.env.CLOUDFLARE_ACCOUNT_ID;
+  const apiToken = process.env.CC_WORKERS_AI_TOKEN ?? process.env.CLOUDFLARE_WORKER_AI_KEY;
+  if (hosted && (!accountId || !apiToken)) { console.error("refusing: the workers-ai provider needs CC_WORKERS_AI_ACCOUNT_ID and CC_WORKERS_AI_TOKEN (or CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_WORKER_AI_KEY) in the environment"); process.exit(2); }
   const agent = replyFile
     ? makeReplayAgent({ replyText: readFileSync(replyFile, "utf8"), usage: reported })
-    : makeOllamaAgent({ host, sourceFiles, styleExample, modelName, existingTests });
+    : hosted
+      ? makeWorkersAiAgent({ accountId, apiToken, sourceFiles, styleExample, existingTests })
+      : makeOllamaAgent({ host, sourceFiles, styleExample, modelName, existingTests });
   const report = { issue: task.number, model: modelName };
   let result;
   try {
@@ -125,9 +142,12 @@ if (cmd === "status") {
     result = await runTask({
       task: { ...task, baseFiles }, agent, budget: localBudget, kill, model,
       limits: { maxInputTokens: 12000, maxOutputTokens: 2500 },
-      allowlist: replyFile ? [] : [hostName],
+      allowlist: replyFile ? [] : hosted ? ["api.cloudflare.com"] : [hostName],
     });
     report.outcome = "ok";
+    report.provider = hosted ? "workers-ai" : replyFile ? "replay" : "ollama";
+    report.usd = result.usd;
+    report.ledger = localBudget.spent();
   } catch (e) {
     report.outcome = e instanceof StopRequestedError ? "stopped" : e instanceof BudgetExceededError ? "budget-stop" : "failed";
     report.reason = e instanceof Error ? e.message : String(e);

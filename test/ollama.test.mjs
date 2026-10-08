@@ -90,3 +90,12 @@ test("through the runner: an Ollama host off the allowlist trips STOP and nothin
   assert.ok(kill.isStopped());
   assert.equal(f.calls.length, 0);
 });
+
+test("existing tests that already cover the module are IN the prompt the live adapter sends (they were silently dropped before)", async () => {
+  const f = fakeFetch({ message: { content: CODE }, prompt_eval_count: 1, eval_count: 1 });
+  const a = makeOllamaAgent({ sourceFiles: SRC, styleExample: "// style", existingTests: { "t/already.test.ts": "it('covered', () => {});" } });
+  await a({ task: TASK, model: "m", limits: LIMITS, fetch: f });
+  const sent = f.calls[0].body.messages.map((m) => m.content).join("\n");
+  assert.match(sent, /t\/already\.test\.ts/);
+  assert.match(sent, /do not duplicate them/);
+});

@@ -44,7 +44,10 @@ function fixture() {
 // ASYNC spawn: the mock server runs in THIS process, so a synchronous spawn would block the very event loop it needs.
 const cli = (args, home) =>
   new Promise((resolve) => {
-    const child = spawn(process.execPath, [CLI, ...args], { env: { ...process.env, COMMON_CONTRIBUTIONS_HOME: home } });
+    // HOME and XDG_STATE_HOME point at scratch too: if the override were ever ignored, the CLI would write under THIS scratch home, never the
+    // real default directory (a mutation run once did exactly that, leaving a STOP file and ledger entries in a person's real state).
+    const scratchHome = tmp();
+    const child = spawn(process.execPath, [CLI, ...args], { env: { ...process.env, HOME: scratchHome, XDG_STATE_HOME: join(scratchHome, "state"), COMMON_CONTRIBUTIONS_HOME: home } });
     let stdout = "", stderr = "";
     child.stdout.on("data", (c) => (stdout += c));
     child.stderr.on("data", (c) => (stderr += c));

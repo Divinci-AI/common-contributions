@@ -46,6 +46,15 @@ export async function runTask({ task, agent, budget, kill, model, limits, allowl
   // The call happened: it goes on the ledger whatever we think of the output.
   const usd = budget.record(model, result.usage?.inputTokens ?? limits.maxInputTokens, result.usage?.outputTokens ?? limits.maxOutputTokens, hold.id);
 
+  // The reservation was priced from the input and output bounds. A provider that reports MORE than that means the bound was wrong,
+  // so the cap was not what it claimed: the spend is recorded (above), and everything stops until a person looks.
+  if (result.usage && (result.usage.inputTokens > limits.maxInputTokens || result.usage.outputTokens > limits.maxOutputTokens)) {
+    kill.trip(`#${task.number}: the provider reported ${result.usage.inputTokens} in / ${result.usage.outputTokens} out, over the reserved ${limits.maxInputTokens} / ${limits.maxOutputTokens}`);
+  }
+  // An adapter that must report usage and did not: the worst case was charged, and three of these in a row trip STOP.
+  const unmeasured = Boolean(result.usageRequired && !result.usage);
+  if (unmeasured) kill.noteFailure(`#${task.number}: the provider reported no token usage`);
+
   const files = result.files ?? {};
   const everything = [result.text ?? "", ...Object.values(files)].join("\n");
 
@@ -71,7 +80,7 @@ export async function runTask({ task, agent, budget, kill, model, limits, allowl
   const violations = diffScopeViolations(Object.keys(files), task.allowed);
   if (violations.length > 0) kill.trip(`#${task.number} changed files outside its scope: ${violations.join(", ")}`);
 
-  kill.noteSuccess();
+  if (!unmeasured) kill.noteSuccess(); // an unmeasured call must not wipe the count that is about to trip STOP
   return { files, usd };
 }
 

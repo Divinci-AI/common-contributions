@@ -193,7 +193,7 @@ disclosure_line: "AI-assisted; reviewed by a human before submission"</pre>
             <tr><td>Coding-agent replay</td><td><span class="lamp built">Built</span></td><td>An agent's reply goes through the same checks. This is how the first runs were done.</td></tr>
             <tr><td>Local model adapter</td><td><span class="lamp part">Mock-tested</span></td><td>Loopback only. Not run against a real model yet.</td></tr>
             <tr><td>Maintainer opt-in file</td><td><span class="lamp part">Designed</span></td><td>Opt-in is by issue label and scope for now.</td></tr>
-            <tr><td>Hosted model, capped API key</td><td><span class="lamp none">Not built</span></td><td>Pricing for the first candidate is known. No adapter yet.</td></tr>
+            <tr><td>Hosted model, capped API key</td><td><span class="lamp built">Built</span></td><td>Workers AI adapter: usage measured from the provider, an input bound enforced before the call, capped by the ledger. One real run cost $0.0027 (2,904 tokens in, 792 out) and a second was refused by the cap before any call. Not yet reconciled against Cloudflare's own usage figure.</td></tr>
             <tr><td>Pull request publishing</td><td><span class="lamp none">Not built</span></td><td>Only the publish gate exists. No PR has been opened.</td></tr>
             <tr><td>Operating-system sandbox</td><td><span class="lamp none">Not built</span></td><td>Today the design relies on the agent returning text.</td></tr>
             <tr><td>One-command install</td><td><span class="lamp none">Not built</span></td><td>No package exists.</td></tr>

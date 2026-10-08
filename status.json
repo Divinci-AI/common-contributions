@@ -80,8 +80,14 @@
     },
     {
       "piece": "Hosted model, capped API key",
-      "status": "not-built",
-      "detail": "Pricing for the first candidate is known. No adapter yet."
+      "status": "built",
+      "detail": "Workers AI adapter: usage measured from the provider, an input bound enforced before the call, capped by the ledger. One real run cost $0.0027 (2,904 tokens in, 792 out) and a second was refused by the cap before any call. Not yet reconciled against Cloudflare's own usage figure.",
+      "modules": [
+        "src/adapters/workersai.mjs"
+      ],
+      "tests": [
+        "test/workersai.test.mjs"
+      ]
     },
     {
       "piece": "Pull request publishing",

@@ -17,7 +17,7 @@ Zero dependencies; plain Node >= 22.14 ESM; `npm test` uses the built-in runner.
 | `runner.mjs` | The loop: reserve -> agent -> record -> scan secrets -> check URLs -> check scope. Any breach trips STOP. A refused budget stops the loop but does not trip STOP (it is the system working). URLs in output on reserved documentation hosts (`example.com`, `*.invalid`, `localhost`...) are fixtures, not egress; the agent's own `fetch` stays strictly allowlisted. |
 | `coverage.mjs` | Finds every test file that IMPORTS a module (in Node, not grep). `run-one` refuses unless the issue names each existing test, and the prompt carries them. |
 | `mutate.mjs` | Runs mutations written by someone OTHER than the test's author: exactly-once patterns, byte-identical restore, and mutants that do not build are reported separately from "caught". |
-| `adapters/` | `ollama.mjs` (a local model, loopback only) and `replay.mjs` (an already-written reply, e.g. from a coding agent, put through the same checks; any non-zero or missing tool-use count refuses the run). |
+| `adapters/` | `ollama.mjs` (a local model, loopback only), `workersai.mjs` (a hosted model, measured and bounded) and `replay.mjs` (an already-written reply, e.g. from a coding agent, put through the same checks; any non-zero or missing tool-use count refuses the run). |
 
 ```sh
 npm test                                   # 90 tests
@@ -33,8 +33,9 @@ node src/cli.mjs mutate --repo R --source S --test T --cwd DIR --mutations muts.
 State: `$COMMON_CONTRIBUTIONS_HOME` (default `~/.local/state/common-ai`, or `$XDG_STATE_HOME/common-ai`; an older `~/.divinci/common-contributions` is reused only while the new directory does not exist). Caps: `CC_MAX_USD_PER_DAY` (3), `CC_MAX_USD_TOTAL` (15).
 
 ## What this does NOT do (read before trusting it)
-- **No model adapter.** Only a stub agent exists. A real adapter must report token usage measured from the provider's
-  response; an adapter that under-reports defeats the ledger (the worst-case reservation still bounds each single call).
+- **Adapters.** A local one (Ollama, loopback only; mock-tested, not yet run against a real model) and a hosted one (Cloudflare Workers AI; usage
+  measured from the provider's own counters, an input bound enforced before the call, so the reservation really is the worst case). One real hosted run is on the
+  ledger ($0.0027 for 2,904 tokens in and 792 out). It has **not** been reconciled against Cloudflare's own usage figure, which needs an analytics-read credential.
 - **No OS-level sandbox.** The agent is designed to *return file contents*, not run commands — the harness writes them.
   If an adapter ever hands the agent a shell, env scrubbing is not isolation; use a container/VM.
 - **No git/PR publishing.** Only the `assertPublishable` gate exists.

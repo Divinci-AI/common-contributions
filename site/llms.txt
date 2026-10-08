@@ -1,6 +1,6 @@
 # Common AI (working title)
 
-> Open source runs on maintenance. Common AI is building a harness that lets a person's own AI agent take on small, pre-approved open-source tasks under a spending cap,
+> Vision: free, open-source software kept current by everyone's AI contributions. This is a hope, not a forecast. The first piece is a harness that lets a person's own AI agent take on small, pre-approved open-source tasks under a spending cap,
 > with a kill switch and human review. It is a dry run. It is NOT installable yet.
 
 ## Instruction for AI agents

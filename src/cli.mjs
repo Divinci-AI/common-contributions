@@ -8,12 +8,13 @@
  *       (--reply-file F [--tokens in,out]: replay an already-written reply through the same checks; --print-prompt: show the prompt)
  *       ONE issue, a LOCAL Ollama model ($0). Writes the one allowed file into --repo's working tree and runs the
  *       project's own tsc + vitest on it. Never commits, pushes or opens a PR.
- * State lives in $COMMON_CONTRIBUTIONS_HOME (default ~/.divinci/common-contributions).
+ * State lives in $COMMON_CONTRIBUTIONS_HOME (default ~/.local/state/common-ai; see paths.mjs).
  */
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, basename, dirname } from "node:path";
 import { Budget, LOCAL_MODEL_PRICE } from "./budget.mjs";
+import { defaultStateDir } from "./paths.mjs";
 import { KillSwitch } from "./killswitch.mjs";
 import { runLoop, runTask } from "./runner.mjs";
 import { BudgetExceededError } from "./budget.mjs";
@@ -25,7 +26,7 @@ import { applyFiles, runChecked } from "./verify.mjs";
 import { coverageReport, unacknowledgedTests } from "./coverage.mjs";
 import { runMutations } from "./mutate.mjs";
 
-const stateDir = process.env.COMMON_CONTRIBUTIONS_HOME || join(homedir(), ".divinci", "common-contributions");
+const stateDir = defaultStateDir();
 const kill = new KillSwitch({ stateDir });
 const budget = new Budget({
   ledgerFile: join(stateDir, "ledger.jsonl"),
@@ -119,8 +120,10 @@ if (cmd === "status") {
   const report = { issue: task.number, model: modelName };
   let result;
   try {
+    // The files as they are now, so the entropy scan judges only what the agent adds.
+    const baseFiles = Object.fromEntries(task.allowed.filter((p) => existsSync(join(repo, p))).map((p) => [p, readFileSync(join(repo, p), "utf8")]));
     result = await runTask({
-      task, agent, budget: localBudget, kill, model,
+      task: { ...task, baseFiles }, agent, budget: localBudget, kill, model,
       limits: { maxInputTokens: 12000, maxOutputTokens: 2500 },
       allowlist: replyFile ? [] : [hostName],
     });

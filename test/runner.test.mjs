@@ -159,3 +159,15 @@ test("an agent that throws frees its reservation: the next run is not refused by
   const r = await run(w, good); // would be refused as "daily cap would be exceeded" if the failed hold were still held
   assert.ok(r.files);
 });
+
+test("a high-entropy token ADDED by the agent trips STOP; the same token already in the file does not", async () => {
+  const TOKEN = ["q9XvT2mZk7LpR4sW", "8nYb1HcJd6FgA3eU"].join("");
+  const out = async () => ({ text: "done", files: { "t/a.test.ts": `const k = "${TOKEN}";` }, usage: { inputTokens: 10, outputTokens: 10 } });
+  const w = world();
+  await assert.rejects(run(w, out), /high-entropy/);
+  assert.ok(w.kill.isStopped());
+  const w2 = world();
+  const r = await runTask({ task: { ...TASK, baseFiles: { "t/a.test.ts": `const old = "${TOKEN}";` } }, agent: out, budget: w2.budget, kill: w2.kill, model: "cloud:m", limits: LIMITS, allowlist: ALLOW });
+  assert.ok(r.files);
+  assert.ok(!w2.kill.isStopped());
+});

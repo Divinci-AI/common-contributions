@@ -7,7 +7,7 @@ import { BudgetExceededError } from "./budget.mjs";
 import { assertAllowedUrl, EgressDeniedError, hostOf, isReservedTestHost, urlsIn } from "./egress.mjs";
 import { StopRequestedError } from "./killswitch.mjs";
 import { diffScopeViolations, isAgentBranch } from "./scope.mjs";
-import { scanForSecrets } from "./secrets.mjs";
+import { scanAddedForEntropy, scanForSecrets } from "./secrets.mjs";
 
 /** A fetch the agent can use that refuses (and trips STOP) for anything off the allowlist. */
 export function guardedFetch({ allowlist, kill, realFetch = globalThis.fetch }) {
@@ -50,6 +50,12 @@ export async function runTask({ task, agent, budget, kill, model, limits, allowl
   const everything = [result.text ?? "", ...Object.values(files)].join("\n");
 
   if (scanForSecrets(everything).length > 0) kill.trip(`secret-shaped string in the output of #${task.number}`);
+  // Prefix-less secrets: only what was ADDED counts (the reply text has no baseline; each file is compared with its original).
+  const addedEntropy = [
+    ...scanAddedForEntropy(result.text ?? ""),
+    ...Object.entries(files).flatMap(([path, content]) => scanAddedForEntropy(content, task.baseFiles?.[path] ?? "")),
+  ];
+  if (addedEntropy.length > 0) kill.trip(`high-entropy string added in the output of #${task.number}`);
 
   for (const url of urlsIn(everything)) {
     // A reserved documentation/test host (example.com, *.invalid, localhost...) reaches nobody: a fixture, not a fetch.

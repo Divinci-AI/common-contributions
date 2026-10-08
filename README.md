@@ -27,7 +27,7 @@ node src/cli.mjs run-one issues.json 25 --repo R --model NAME --reply-file reply
 node src/cli.mjs run-one issues.json 25 --repo R --model NAME --print-prompt                         # the exact prompt
 node src/cli.mjs mutate --repo R --source S --test T --cwd DIR --mutations muts.json                 # independent mutations
 ```
-State: `$COMMON_CONTRIBUTIONS_HOME` (default `~/.divinci/common-contributions`). Caps: `CC_MAX_USD_PER_DAY` (3), `CC_MAX_USD_TOTAL` (15).
+State: `$COMMON_CONTRIBUTIONS_HOME` (default `~/.local/state/common-ai`, or `$XDG_STATE_HOME/common-ai`; an older `~/.divinci/common-contributions` is reused only while the new directory does not exist). Caps: `CC_MAX_USD_PER_DAY` (3), `CC_MAX_USD_TOTAL` (15).
 
 ## What this does NOT do (read before trusting it)
 - **No model adapter.** Only a stub agent exists. A real adapter must report token usage measured from the provider's
@@ -36,7 +36,7 @@ State: `$COMMON_CONTRIBUTIONS_HOME` (default `~/.divinci/common-contributions`).
   If an adapter ever hands the agent a shell, env scrubbing is not isolation; use a container/VM.
 - **No git/PR publishing.** Only the `assertPublishable` gate exists.
 - **`--tool-uses` is relayed by whoever runs the harness**, not measured by it: a replayed agent's tool count cannot be verified here.
-- **The secret scanner is pattern-based**; an unknown token shape passes. **Egress control covers the `fetch` it hands
+- **The secret scanner is pattern-based plus an entropy check on what the agent ADDED** (32+ characters, a digit and a letter, 4.2+ bits per character; hex only next to a key/token/secret word). An unknown short or low-entropy secret passes. **Egress control covers the `fetch` it hands
   the agent and URLs in output, not the network stack.**
 - **Concurrent runners share headroom through holds.** A reservation is a hold written under a lock, so a second process sees what the first has claimed (two processes raced 12 of 12 times: old code let both through, new code let one). A hold left by a crashed process counts until it expires (10 minutes); after that its possible spend is forgotten.
 - Mutation-tested (40+ guard removals, all caught) — that shows the tests pin the guards, not that the guards are

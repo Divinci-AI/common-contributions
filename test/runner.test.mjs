@@ -151,3 +151,11 @@ test("the reserved-host exemption never widens the AGENT'S fetch: guardedFetch s
   await assert.rejects(f("https://example.com/x"), /allowlist/);
   assert.ok(w.kill.isStopped());
 });
+
+test("an agent that throws frees its reservation: the next run is not refused by the failed one's worst case", async () => {
+  // worst case per call is 1000*$1/1M + 1000*$4/1M = $0.005; the daily cap fits exactly one such call
+  const w = world({ maxUsdPerDay: 0.006 });
+  await assert.rejects(run(w, async () => { throw new Error("provider 500"); }), /provider 500/);
+  const r = await run(w, good); // would be refused as "daily cap would be exceeded" if the failed hold were still held
+  assert.ok(r.files);
+});

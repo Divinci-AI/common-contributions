@@ -31,19 +31,20 @@ export async function runTask({ task, agent, budget, kill, model, limits, allowl
   kill.check();
   if (!task.allowed?.length) throw new Error(`task #${task.number} names no allowed path; not runnable`);
 
-  budget.reserve(model, limits.maxInputTokens, limits.maxOutputTokens);
+  const hold = budget.reserveHold(model, limits.maxInputTokens, limits.maxOutputTokens);
 
   let result;
   try {
     result = await agent({ task, model, limits, fetch: guardedFetch({ allowlist, kill, realFetch }) });
   } catch (e) {
+    budget.release(hold.id); // the call failed: its reservation must not keep eating headroom
     if (e instanceof StopRequestedError) throw e;
     kill.noteFailure(`agent error on #${task.number}: ${e instanceof Error ? e.message : String(e)}`);
     throw e;
   }
 
   // The call happened: it goes on the ledger whatever we think of the output.
-  const usd = budget.record(model, result.usage?.inputTokens ?? limits.maxInputTokens, result.usage?.outputTokens ?? limits.maxOutputTokens);
+  const usd = budget.record(model, result.usage?.inputTokens ?? limits.maxInputTokens, result.usage?.outputTokens ?? limits.maxOutputTokens, hold.id);
 
   const files = result.files ?? {};
   const everything = [result.text ?? "", ...Object.values(files)].join("\n");

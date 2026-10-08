@@ -6,7 +6,7 @@ Zero dependencies; plain Node >= 22.14 ESM; `npm test` uses the built-in runner.
 
 | Module | Guarantees |
 |---|---|
-| `budget.mjs` | Every call is **reserved at worst-case cost before it is made** and refused if it could cross the per-day or total cap; real cost is appended to a JSONL ledger that survives restarts; a model with no listed price is refused (unknown price is not free). |
+| `budget.mjs` | Every call is **reserved at worst-case cost before it is made, as a lock-protected hold that other processes can see** and refused if it could cross the per-day or total cap; real cost is appended to a JSONL ledger that survives restarts; a model with no listed price is refused (unknown price is not free). |
 | `killswitch.mjs` | A `STOP` file checked before every model call and git action; anything can trip it, only a human clears it (`clear-stop --yes`); first reason kept; N consecutive failures trip it. Local only — no central switch. |
 | `secrets.mjs` | Scans output and produced files for secret shapes (findings carry the KIND, never the text); the sandbox environment is an **allowlist** with `HOME` replaced. |
 | `egress.mjs` | Host allowlist (exact or `*.suffix`; never a bare `*`); the agent gets a `fetch` that trips STOP off-list. |
@@ -38,7 +38,7 @@ State: `$COMMON_CONTRIBUTIONS_HOME` (default `~/.divinci/common-contributions`).
 - **`--tool-uses` is relayed by whoever runs the harness**, not measured by it: a replayed agent's tool count cannot be verified here.
 - **The secret scanner is pattern-based**; an unknown token shape passes. **Egress control covers the `fetch` it hands
   the agent and URLs in output, not the network stack.**
-- **The ledger is single-process:** two concurrent runners could both reserve against the same headroom.
+- **Concurrent runners share headroom through holds.** A reservation is a hold written under a lock, so a second process sees what the first has claimed (two processes raced 12 of 12 times: old code let both through, new code let one). A hold left by a crashed process counts until it expires (10 minutes); after that its possible spend is forgotten.
 - Mutation-tested (40+ guard removals, all caught) — that shows the tests pin the guards, not that the guards are
   sufficient against a determined attacker. A first real run also taught that a mutation score is a floor, not a gate:
   a test file tuned against one mutation set fell from 86% to 50% on a held-out set written by a different author.

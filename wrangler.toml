@@ -1,7 +1,18 @@
 name = "common-contributions-preview"
+main = "src/worker.mjs"
 compatibility_date = "2026-10-01"
 workers_dev = true
 
 [assets]
 directory = "./site"
+binding = "ASSETS"
 not_found_handling = "404-page"
+run_worker_first = ["/api/*"]
+
+# Not yet added: the D1 binding. Create the database, then add:
+#   [[d1_databases]]
+#   binding = "DB"
+#   database_name = "common-contributions-proposals"
+#   database_id = "<from `wrangler d1 create`>"
+#   migrations_dir = "migrations"
+# and set the secrets PROPOSALS_SUBMIT_TOKEN and PROPOSALS_ADMIN_TOKEN (two different values).

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Common AI · Alternate B: the workbench</title>
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../fonts.css">
+<style>
+:root{--bg:#0d1215;--panel:#151c20;--panel2:#1c252a;--ink:#e6edf0;--muted:#8fa1a9;--line:#27333a;--ok:#38c172;--amber:#e0a526;--trip:#ff6a2b;--link:#5fd0c4}
+@media (prefers-color-scheme:light){:root{--bg:#e8ecec;--panel:#f7f9f9;--panel2:#eef2f2;--ink:#10181c;--muted:#475660;--line:#c4ccce;--ok:#1d8a4f;--amber:#9a6b00;--trip:#b8460f;--link:#0a5f66}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:1rem/1.6 "Hanken Grotesk",system-ui,sans-serif}
+a{color:var(--link)}a:focus-visible{outline:3px solid var(--link);outline-offset:2px}
+.skip{position:absolute;left:-999px}.skip:focus{left:1rem;top:1rem;background:var(--bg);padding:.5rem}
+.bar{display:flex;flex-wrap:wrap;gap:.5rem 1.25rem;align-items:center;padding:.65rem 1rem;border-bottom:1px solid var(--line);background:var(--panel);font:500 .8rem "JetBrains Mono",monospace;color:var(--muted)}
+.bar b{color:var(--ink)}.bar .sp{flex:1}.bar a{color:inherit}
+.dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;background:var(--amber);margin-right:.4rem}
+.wrap{max-width:70rem;margin:0 auto;padding:0 1rem 4rem}
+.hero{padding:3.5rem 0 2rem}
+h1{font:700 clamp(2.4rem,7vw,4.2rem)/1.02 "Barlow Condensed","Arial Narrow",sans-serif;margin:0 0 1rem;text-transform:uppercase;letter-spacing:.005em}
+.lede{max-width:44rem;font-size:1.2rem;color:var(--ink)}
+h2{font:700 1.6rem "Barlow Condensed",sans-serif;text-transform:uppercase;letter-spacing:.04em;margin:3rem 0 1rem}
+h2 small{font:500 .75rem "JetBrains Mono",monospace;color:var(--muted);margin-left:.75rem;letter-spacing:.04em;text-transform:none}
+.grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))}
+.mod{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--ok);border-radius:4px;padding:1rem}
+.mod h3{margin:0 0 .35rem;font:700 1.15rem "Barlow Condensed",sans-serif;text-transform:uppercase;letter-spacing:.05em}
+.mod p{margin:0;color:var(--muted);font-size:.95rem}
+.mod .st{font:600 .7rem "JetBrains Mono",monospace;color:var(--ok);letter-spacing:.06em;text-transform:uppercase}
+pre{background:#080c0e;color:#cfe3e8;border:1px solid var(--line);border-radius:4px;padding:1rem;overflow-x:auto;font:.85rem/1.55 "JetBrains Mono",monospace;margin:0}
+pre .k{color:#7aa2ad}pre .g{color:#38c172}pre .t{color:#ff6a2b}pre .m{color:#6c7f87}
+.two{display:grid;gap:1.25rem;grid-template-columns:1fr}
+@media(min-width:56rem){.two{grid-template-columns:1fr 1fr}}
+.fact{background:var(--panel2);border-left:3px solid var(--link);padding:.9rem 1rem;margin:0 0 1rem}
+.fact b{display:block;font:700 1.05rem "Barlow Condensed",sans-serif;text-transform:uppercase;letter-spacing:.04em}
+.fact span{color:var(--muted);font-size:.95rem}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);font-size:.92rem}
+th,td{text-align:left;padding:.6rem .75rem;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;white-space:nowrap}td:last-child{color:var(--muted)}
+.lamp{font:600 .72rem "JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.05em;padding:.12rem .45rem;border-radius:3px;border:1px solid var(--ok);color:var(--ok)}
+.lamp.designed,.lamp.partial,.lamp.mock-tested{border-color:var(--amber);color:var(--amber)}.lamp.not-built,.lamp.not-cleared{border-color:var(--trip);color:var(--trip)}
+.scroll{overflow-x:auto}
+.cta{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1.25rem}
+.btn{display:inline-block;padding:.6rem 1rem;border:1px solid var(--ink);color:var(--ink);text-decoration:none;font-weight:600;border-radius:3px}
+.btn.p{background:var(--ink);color:var(--bg)}
+footer{border-top:1px solid var(--line);margin-top:3rem;padding-top:1.25rem;color:var(--muted);font-size:.85rem}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="bar"><span><span class="dot" aria-hidden="true"></span><b>Common AI</b></span><span>status: early · not installable</span><span class="sp"></span><a href="../../">Current homepage</a><a href="../a/">Alternate A</a></div>
+<div class="wrap" id="main">
+  <section class="hero">
+    <h1>Let AI help keep free software alive. <br>On the maintainer's terms.</h1>
+    <p class="lede">Common AI is building the safety layer first: a harness that keeps an AI's contribution small, capped and in front of a person. It exists and runs as a dry run. You cannot install it yet.</p>
+    <div class="cta"><a class="btn p" href="https://github.com/Divinci-AI/common-contributions">Read the source</a><a class="btn" href="https://github.com/Divinci-AI/common-contributions/issues/new/choose">Propose a project</a><a class="btn" href="../../report/">The dry-run report</a></div>
+  </section>
+
+  <h2>The guards <small>each one is tested by removing it and watching a test fail</small></h2>
+  <div class="grid">
+    <div class="mod"><span class="st">built</span><h3>Spend cap</h3><p>Worst case is held under a lock before every call, so two runners cannot double-spend.</p></div>
+    <div class="mod"><span class="st">built</span><h3>Kill switch</h3><p>Checked before every call. Three failures in a row trip it. Only a person clears it.</p></div>
+    <div class="mod"><span class="st">built</span><h3>Scope, secrets, egress</h3><p>One file per task, a secret scan on what the agent adds, a host allowlist, <code>agent/*</code> branches only.</p></div>
+    <div class="mod"><span class="st">built</span><h3>Coverage gate</h3><p>Before a task is filed, checks whether the module already has tests, so nobody spends tokens on what exists.</p></div>
+  </div>
+
+  <h2>What a task looks like <small>shape of the flow, not a recording</small></h2>
+  <div class="two">
+    <pre aria-label="Example of the flow of one task"><span class="m"># one task, one file, one cap</span>
+<span class="k">check</span>   opt-in file present?        <span class="g">yes</span>
+<span class="k">check</span>   kill switch clear?          <span class="g">yes</span>
+<span class="k">hold</span>    worst-case spend reserved   <span class="g">ok</span>
+<span class="k">call</span>    model (no tools, no shell)
+<span class="k">scan</span>    added text for secrets      <span class="g">clean</span>
+<span class="k">verify</span>  types + tests               <span class="g">pass</span>
+<span class="k">stop</span>    wait for a person to approve   <span class="t">default: no</span></pre>
+    <div>
+      <div class="fact"><b>Double-spend, measured</b><span>Two runners, two $0.60 calls, a $1.00 cap, raced 12 times. The old code let both through 12 of 12. The new code let exactly one through 12 of 12.</span></div>
+      <div class="fact"><b>First hosted-model run</b><span>2,904 tokens in, 792 out, priced from the provider's own counters: $0.002709. A second run was refused before any call because it would have crossed the daily cap.</span></div>
+    </div>
+  </div>
+
+  <h2>Status of every piece <small>from status.json, nothing rounded up</small></h2>
+  <div class="scroll"><table>
+<thead><tr><th scope="col">Piece</th><th scope="col">Status</th><th scope="col">Detail</th></tr></thead>
+<tbody>
+<tr><th scope="row">Spend cap and ledger</th><td><span class="lamp built">built</span></td><td>Worst case held under a lock before each call, so two runners cannot double-spend. Append-only ledger. Unknown prices refused.</td></tr>
+<tr><th scope="row">Kill switch</th><td><span class="lamp built">built</span></td><td>Checked before every call. Three failures in a row trip it. Only a person clears it.</td></tr>
+<tr><th scope="row">Scope, secrets, egress checks</th><td><span class="lamp built">built</span></td><td>One file per task, secret scan (patterns plus an entropy check on what the agent adds), host allowlist, <code>agent/*</code> branches only.</td></tr>
+<tr><th scope="row">Coverage gate, mutation runner</th><td><span class="lamp built">built</span></td><td>Used on the first runs.</td></tr>
+<tr><th scope="row">Coding-agent replay</th><td><span class="lamp built">built</span></td><td>An agent's reply goes through the same checks. This is how the first runs were done.</td></tr>
+<tr><th scope="row">Local model adapter</th><td><span class="lamp mock-tested">mock-tested</span></td><td>Loopback only. Not run against a real model yet.</td></tr>
+<tr><th scope="row">Maintainer opt-in file</th><td><span class="lamp designed">designed</span></td><td>Opt-in is by issue label and scope for now.</td></tr>
+<tr><th scope="row">Hosted model, capped API key</th><td><span class="lamp built">built</span></td><td>Workers AI adapter: usage measured from the provider, an input bound enforced before the call, capped by the ledger. One real run cost $0.0027 (2,904 tokens in, 792 out) and a second was refused by the cap before any call. Not yet reconciled against Cloudflare's own usage figure.</td></tr>
+<tr><th scope="row">Pull request publishing</th><td><span class="lamp not-built">not-built</span></td><td>Only the publish gate exists. No PR has been opened.</td></tr>
+<tr><th scope="row">Operating-system sandbox</th><td><span class="lamp not-built">not-built</span></td><td>Today the design relies on the agent returning text.</td></tr>
+<tr><th scope="row">One-command install</th><td><span class="lamp not-built">not-built</span></td><td>No package exists.</td></tr>
+<tr><th scope="row">Name and domain</th><td><span class="lamp not-cleared">not-cleared</span></td><td>Common AI is the name for now. Another organisation, CommonAI, uses a near-identical name; no trademark or domain check has been done and nothing is registered.</td></tr>
+</tbody></table></div>
+
+  <h2>The bigger bet</h2>
+  <p class="lede" style="font-size:1.05rem;color:var(--muted)">If AI changes can be made safe to receive, free software could be kept current by anyone with spare capacity, and a universal catalog could send you to an existing project before you spend a token building another. Those are hopes, not results. Most maintainers are unpaid today and nothing here pays anyone. The catalog does not exist yet.</p>
+
+  <footer>Common AI is a working title, not cleared as a name, and not affiliated with CommonAI. Self-hosted fonts, no third-party scripts, no tracking. <a href="https://github.com/Divinci-AI/common-contributions">Source</a> (Apache-2.0).</footer>
+</div>
+</body>
+</html>

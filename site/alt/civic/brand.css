@@ -1,0 +1,47 @@
+/* Brand 3 · CIVIC — public-works signage. Flat colour blocks, heavy rules, forest green + sun yellow on warm white, square corners. */
+:root:root:root{color-scheme:light;--bg:#faf8ef;--bg2:#efecdc;--ink:#0d1f17;--muted:#3b4a42;--line:#0d1f17;--link:#0f4a35;--trip-ink:#0f4a35;--trip-soft:#f6e7a5;--ok:#0f4a35;--amber:#8a6400;--green:#0f4a35;--sun:#f2b705}
+body{font-family:var(--font-body);font-weight:500}
+.top{border-bottom:8px solid var(--ink);padding-block:1rem .9rem}
+.mark{font-family:var(--font-body);font-weight:700;font-size:1.45rem;letter-spacing:-.01em;text-transform:none;display:flex;align-items:center;gap:.7rem}
+.mark::before{content:"";width:2rem;height:2rem;background:var(--sun);border:3px solid var(--ink);box-shadow:5px 5px 0 var(--green)}
+.nav{font-weight:700;font-size:.95rem}.nav a{color:var(--ink)}.nav a:hover{background:var(--sun);text-decoration:none}
+.hero{background:var(--green);color:#faf8ef;margin-block:1.4rem 0;padding:clamp(1.6rem,5vw,3.4rem);border:3px solid var(--ink);box-shadow:10px 10px 0 var(--sun)}
+.kicker{color:var(--sun);font-weight:700;font-size:.78rem}
+.hero h1{font-family:var(--font-body);font-weight:700;text-transform:none;letter-spacing:-.03em;line-height:.95;font-size:clamp(2.8rem,9.5vw,6.6rem);max-width:12ch}
+.hero h1 em{color:var(--sun);font-style:normal}
+.hero .lede{color:#e9f1e6;font-size:1.25rem;max-width:36rem}
+.pill{background:var(--sun);color:var(--ink);border:3px solid var(--ink);border-radius:0;font-weight:700;letter-spacing:.06em}
+.hero .btn{border:3px solid #faf8ef;color:#faf8ef;border-radius:0;font-weight:700}
+.hero .btn:hover{background:#faf8ef;color:var(--green)}
+.btn{border:3px solid var(--ink);border-radius:0}
+section{border-top:8px solid var(--ink);margin-top:3.5rem;padding-top:1.6rem}
+h2{font-family:var(--font-body);font-weight:700;text-transform:none;letter-spacing:-.025em;line-height:.98;font-size:clamp(2.2rem,6vw,4rem);max-width:18ch}
+.prose{color:var(--ink)}
+.card,.cat-step,.cat-out>div,ol.run li,.scroll{border-radius:0;border:3px solid var(--ink)}
+.card{background:#fff}
+.cards3>.card:nth-child(2){background:var(--sun)}.cards3>.card:nth-child(3){background:var(--green);color:#faf8ef}
+.cards3>.card:nth-child(3) p,.cards3>.card:nth-child(3) .stat{color:#e9f1e6}.cards3>.card:nth-child(3) b{color:var(--sun)}
+.cards3>.card:nth-child(3) a{color:var(--sun)}
+.cards3>.card:nth-child(2) p{color:var(--ink)}
+.card b,.card.area b{font-family:var(--font-body);text-transform:none;letter-spacing:-.02em;font-size:1.3rem}
+.card.built b,.card.part b,.card.none b{color:var(--ink)}.card.state.built{background:#fff}
+.card p{color:var(--muted)}
+.card.area .tag{font-weight:700;color:var(--ink);background:var(--bg2);align-self:flex-start;padding:.1rem .45rem}
+.card.area .stat{border-top:3px solid var(--ink);color:inherit}
+.card.area.ask{border-style:solid}
+.cat-step,.cat-out>div{background:#fff;color:var(--ink)}.cat-step.key{background:var(--sun);box-shadow:none}
+.cat-step i,.cat-out i{color:var(--ink)}.cat-step .n{color:var(--ink);font-weight:700}
+.cat-out .yes{background:var(--green);color:#faf8ef;border-color:var(--ink)}.cat-out .yes b{color:var(--sun)}.cat-out .yes i{color:#e9f1e6}
+.cat-out .no b{color:var(--ink)}
+.cat-arrow,.cat-arrow::after{border-top-color:var(--ink)}.cat-arrow{background:var(--ink)}
+@media(min-width:56rem){.cat-arrow::after{border-left-color:var(--ink);border-top-color:transparent}}
+ol.run li{background:#fff}ol.run.four li .ic{color:var(--green)}
+.photo img{border-radius:0;border:3px solid var(--ink);filter:saturate(1.05) contrast(1.04)}
+.photo figcaption{font-family:var(--font-body);font-weight:700;font-size:.75rem;letter-spacing:0;text-transform:none;color:var(--ink)}
+.note{font-weight:700;background:var(--sun);border:3px solid var(--ink);padding:.7rem 1rem;max-width:46rem;color:var(--ink)}
+.list li{border-left:8px solid var(--green);padding-left:1rem}
+footer{border-top:8px solid var(--ink);color:var(--ink);font-weight:500}
+.lamp.built::before{box-shadow:none}
+section .kicker{color:var(--green)}
+.hero .kicker{color:var(--sun)}
+@media(max-width:40rem){.hero{box-shadow:none}}

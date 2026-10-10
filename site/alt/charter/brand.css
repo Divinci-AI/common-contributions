@@ -1,0 +1,41 @@
+/* Brand 1 · CHARTER — a founding document. Ivory stock, navy ink, one oxblood seal colour, serif headings, double rules. */
+:root:root:root{color-scheme:light;--bg:#f2ecdc;--bg2:#ebe3cf;--ink:#16202c;--muted:#4a5460;--line:#b9ae93;--link:#7a1a22;--trip-ink:#7a1a22;--trip-soft:#efe0d6;--ok:#2f6b4f;--amber:#8a5a00;--panel:#16202c;--engrave:#efe7d2;--engrave-dim:#b9b09a;
+ --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif}
+body{font-family:var(--serif);font-size:1.125rem;line-height:1.65;background-image:radial-gradient(rgba(120,100,60,.07) 1px,transparent 1px);background-size:5px 5px}
+.wrap{max-width:62rem}
+.top{flex-direction:column;align-items:center;text-align:center;border-bottom:3px double var(--ink);padding-block:1.6rem 1rem;gap:.9rem}
+.mark{font-family:var(--serif);font-weight:700;font-size:1.6rem;letter-spacing:.32em;display:flex;align-items:center;gap:.9rem}
+.mark::before{content:"";width:2.4rem;height:2.4rem;border-radius:50%;border:2px solid var(--trip-ink);box-shadow:inset 0 0 0 4px var(--bg),inset 0 0 0 6px var(--trip-ink);background:radial-gradient(circle,var(--trip-ink) 0 3px,transparent 3.5px)}
+.nav{justify-content:center;font-variant:small-caps;letter-spacing:.12em;font-size:1rem;gap:.25rem 1.6rem}
+.nav a{color:var(--ink)}
+.kicker{font-family:var(--serif);font-variant:small-caps;font-size:.95rem;letter-spacing:.2em;color:var(--trip-ink);text-transform:lowercase}
+.hero{align-items:center;text-align:center;padding-block:clamp(2rem,6vw,4rem) 2rem}
+.hero h1{font-family:var(--serif);text-transform:none;font-weight:700;font-size:clamp(2.6rem,8vw,5.2rem);line-height:1.04;letter-spacing:-.01em;max-width:16ch}
+.hero h1 em{font-style:italic;color:var(--trip-ink)}
+.hero .lede{font-size:1.3rem;color:var(--ink);margin-inline:auto}
+.status{justify-content:center}
+.pill{font-family:var(--serif);font-variant:small-caps;letter-spacing:.18em;font-size:.95rem;border:2px solid var(--trip-ink);border-radius:2px;background:transparent;color:var(--trip-ink);transform:rotate(-2deg);padding:.3rem .9rem}
+.btn{border-radius:2px;font-family:var(--serif);font-variant:small-caps;letter-spacing:.1em;font-size:1.02rem;border:1.5px solid var(--ink)}
+.btn:hover{background:var(--trip-ink);border-color:var(--trip-ink);color:var(--bg)}
+section{border-top:1px solid var(--ink);margin-top:3.5rem;padding-top:2.5rem;position:relative}
+section::before{content:"";position:absolute;left:0;right:0;top:3px;border-top:1px solid var(--ink)}
+h2{font-family:var(--serif);text-transform:none;font-weight:700;font-size:clamp(2rem,5vw,3.1rem);line-height:1.08;max-width:24ch}
+.prose{color:var(--ink)}
+.card,.cat-step,.cat-out>div,ol.run li,.scroll{border-radius:0;border:1.5px solid var(--ink)}
+.card{background:#f8f3e5;box-shadow:5px 5px 0 var(--line)}
+.card b,.cat-step b,.cat-out b,.card.area b{font-family:var(--serif);text-transform:none;letter-spacing:0;font-size:1.3rem}
+.card.built b{color:var(--ok)}.card.none b{color:var(--trip-ink)}.card.part b{color:var(--amber)}
+.card p{color:var(--ink)}
+.card.area .tag{font-family:var(--serif);font-variant:small-caps;letter-spacing:.16em;font-size:.9rem}
+.cat-step,.cat-out>div{background:#f8f3e5;color:var(--ink)}
+.cat-step i,.cat-out i{color:var(--muted)}.cat-step .n{color:var(--trip-ink);font-family:var(--serif);font-size:1rem}
+.cat-step.key{box-shadow:5px 5px 0 var(--trip-ink);border-color:var(--ink)}
+.cat-out .yes b{color:var(--ok)}.cat-out .no b{color:var(--trip-ink)}
+.cat-arrow,.cat-arrow::after{filter:none}
+ol.run li{background:#f8f3e5}ol.run.four li .ic{color:var(--trip-ink)}
+.photo img{border-radius:0;border:1.5px solid var(--ink);padding:6px;background:#f8f3e5;filter:sepia(.35) saturate(.8) contrast(1.02)}
+.photo figcaption{font-family:var(--serif);font-style:italic;font-size:.85rem;letter-spacing:0}
+.note{font-style:italic;border-left:3px solid var(--trip-ink);padding-left:1rem}
+.list li{border-left:3px solid var(--trip-ink)}
+footer{border-top:3px double var(--ink);font-size:.9rem}
+.lamp,.pill,.kicker{text-rendering:optimizeLegibility}

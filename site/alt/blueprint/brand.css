@@ -1,0 +1,38 @@
+/* Brand 2 · BLUEPRINT — an engineering standard. Deep navy field, drafting grid, white hairlines, one safety-yellow accent, mono labels. */
+:root:root:root{color-scheme:dark;--bg:#0a1b33;--bg2:#0f2748;--ink:#eaf2ff;--muted:#9db4d3;--line:#2b4a74;--link:#ffd23f;--trip-ink:#ffd23f;--trip-soft:#162f55;--ok:#6ee7a8;--amber:#ffd23f;--panel:#0f2748;--engrave:#eaf2ff;--engrave-dim:#9db4d3}
+body{background-color:var(--bg);background-image:linear-gradient(rgba(157,180,211,.09) 1px,transparent 1px),linear-gradient(90deg,rgba(157,180,211,.09) 1px,transparent 1px);background-size:32px 32px}
+.top{border-bottom:1px solid var(--line);padding-block:1rem}
+.mark{font-family:var(--font-mono);font-weight:500;font-size:.95rem;letter-spacing:.18em;display:flex;align-items:center;gap:.7rem}
+.mark::before{content:"";width:1.3rem;height:1.3rem;border:1.5px solid var(--ink);background:linear-gradient(var(--ink),var(--ink)) center/1.5px 100% no-repeat,linear-gradient(var(--ink),var(--ink)) center/100% 1.5px no-repeat}
+.nav{font-family:var(--font-mono);font-size:.74rem;letter-spacing:.1em;text-transform:uppercase}
+.kicker{color:var(--ok);font-size:.75rem}
+.kicker::before{content:"§ "}
+.hero{border-left:3px solid var(--link);padding-left:clamp(1rem,3vw,2rem);margin-top:2rem}
+.hero h1{font-size:clamp(3rem,10vw,6.4rem);line-height:.92;max-width:16ch}
+.hero h1 em{color:var(--link)}
+.hero .lede{color:var(--ink)}
+.pill{border-radius:0;background:var(--link);color:#0a1b33;font-weight:500;letter-spacing:.1em}
+.btn{border-radius:0;border:1px solid var(--ink);font-family:var(--font-mono);font-size:.78rem;letter-spacing:.08em;text-transform:uppercase}
+.btn:hover{background:var(--link);border-color:var(--link);color:#0a1b33}
+h2{font-size:clamp(2rem,5.5vw,3.3rem)}
+section{border-top:1px solid var(--line);margin-top:3rem;position:relative}
+section::before{content:"";position:absolute;left:0;top:-4px;width:7.5rem;height:7px;background:var(--link)}
+.prose{color:var(--muted)}
+.card,.cat-step,.cat-out>div,ol.run li,.scroll{border-radius:0;border:1px solid var(--line);background:rgba(15,39,72,.82);position:relative}
+.card::after,.cat-step::after,ol.run li::after{content:"";position:absolute;right:-1px;top:-1px;width:10px;height:10px;border-top:2px solid var(--ink);border-right:2px solid var(--ink)}
+.card b,.card.area b{font-size:1.3rem;letter-spacing:.07em}
+.card.built b{color:var(--ok)}.card.part b{color:var(--link)}.card.none b{color:#ff8a6b}
+.card p,.card.area .stat{color:var(--muted)}.card.area .stat{color:var(--ink);border-color:var(--line)}
+.card.area .tag{color:var(--ok)}
+.cat-step,.cat-out>div{color:var(--ink)}.cat-step.key{border-color:var(--link);box-shadow:0 0 0 1px var(--link)}
+.cat-out .yes{border-color:var(--ok)}.cat-out .no b{color:var(--link)}
+.cat-step .n{color:var(--ok)}
+.photo img{border-radius:0;border:1px solid var(--line);filter:grayscale(1) contrast(1.15) brightness(.85);mix-blend-mode:luminosity;background:#0a1b33}
+.photo{background:#1c4a8a;border:1px solid var(--line)}
+.photo figcaption{padding:.4rem .6rem;background:var(--bg)}
+.note{color:var(--muted);border-left:2px solid var(--link);padding-left:1rem;font-family:var(--font-mono);font-size:.8rem}
+.list li{border-left:3px solid var(--link)}
+ol.run.four li .ic{color:var(--link)}
+.cat-arrow{background:var(--ink)}.cat-arrow::after{border-top-color:var(--ink)}
+@media(min-width:56rem){.cat-arrow::after{border-left-color:var(--ink);border-top-color:transparent}}
+footer{border-top:1px solid var(--line);font-family:var(--font-mono);font-size:.74rem}

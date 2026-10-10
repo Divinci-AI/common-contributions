@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Dry-run report · Common AI</title>
-<meta name="description" content="What the first Common Contributions runs found: a kill switch that stopped itself, tests that failed against the real code, two real bugs, and held-out mutation scores.">
+<meta name="description" content="What the first Common Contributions runs found: tests that failed against the real code, two real bugs, mislabeled tasks, and held-out mutation scores.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../fonts.css">
@@ -16,7 +16,7 @@
   <header class="top">
     <a class="mark" href="../">Common AI</a>
     <nav class="nav" aria-label="Report sections">
-      <a href="#first">The first run</a><a href="#found">What it found</a><a href="#scores">Scores</a><a href="#terms">Terms</a>
+      <a href="#found">What it found</a><a href="#first">The first run</a><a href="#scores">Scores</a><a href="#terms">Terms</a>
     </nav>
   </header>
   <main>
@@ -26,6 +26,18 @@
       <p class="lede">Two small modules, tested by an AI agent working text-only, checked by a harness, then attacked by mutations written by other models. Everything here was produced on our own issues in our own repository. A person approved every step that left the machine. The test files were reviewed by two other models, not yet by a maintainer.</p>
       <p class="crumb"><a href="../">Back to the panel</a></p>
     </div>
+
+    <section id="found" aria-labelledby="w-h">
+      <span class="kicker">What else the runs turned up</span>
+      <h2 id="w-h">Five things, one of them ours to own.</h2>
+      <ul class="finds">
+        <li><b>Three of the five tasks we filed were wrong.</b> We checked for a test file next to each module and missed tests elsewhere. A reviewer found it. The label came off those three, and the harness now searches every test for imports.</li>
+        <li><b>The agent's first draft failed 5 of 19 checks.</b> It cannot run code, so its expected values were its own arithmetic. The harness ran the real tests and caught it.</li>
+        <li><b>Those failures pointed at a real off-by-one.</b> For ink ending on row 79 of 100, one function returns 0.81. For ink flush with the bottom it returns 1.01, past the image bottom the documentation calls 1. At the sizes the page draws it, that is a fraction of a pixel.</li>
+        <li><b>Another test exposed a real bug.</b> The code that inserts a generated section into a page collapses <code>$$</code> to <code>$</code>. The agent had pinned that as expected. Reviewers asked for a test that fails today and turns red when the bug is fixed.</li>
+        <li><b>One review model produced nothing usable.</b> It returned about 106 KB of deliberation and ended mid-sentence. A second reviewer that checked its own output on the first try did the job.</li>
+      </ul>
+    </section>
 
     <section id="first" aria-labelledby="f-h">
       <span class="kicker">The first run</span>
@@ -38,18 +50,6 @@ cause    https://example.com/logo.png
 written  nothing
 state    STOP is set until a person clears it</pre>
       <p class="note">The latch was right to hold and the rule was too blunt. The fix taught the output check about reserved documentation hosts. It did not bypass the stop. The agent's own network access stayed strict.</p>
-    </section>
-
-    <section id="found" aria-labelledby="w-h">
-      <span class="kicker">What else the runs turned up</span>
-      <h2 id="w-h">Five things, one of them ours to own.</h2>
-      <ul class="finds">
-        <li><b>Three of the five tasks we filed were wrong.</b> We checked for a test file next to each module and missed tests elsewhere. A reviewer found it. The label came off those three, and the harness now searches every test for imports.</li>
-        <li><b>The agent's first draft failed 5 of 19 checks.</b> It cannot run code, so its expected values were its own arithmetic. The harness ran the real tests and caught it.</li>
-        <li><b>Those failures pointed at a real off-by-one.</b> For ink ending on row 79 of 100, one function returns 0.81. For ink flush with the bottom it returns 1.01, past the image bottom the documentation calls 1. At the sizes the page draws it, that is a fraction of a pixel.</li>
-        <li><b>Another test exposed a real bug.</b> The code that inserts a generated section into a page collapses <code>$$</code> to <code>$</code>. The agent had pinned that as expected. Reviewers asked for a test that fails today and turns red when the bug is fixed.</li>
-        <li><b>One review model produced nothing usable.</b> It returned about 106 KB of deliberation and ended mid-sentence. A second reviewer that checked its own output on the first try did the job.</li>
-      </ul>
     </section>
 
     <section id="scores" aria-labelledby="s-h">

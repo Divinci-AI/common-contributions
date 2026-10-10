@@ -129,3 +129,8 @@ test("authenticated responses are never cacheable; only the public list is", asy
   assert.equal((await call(e, "GET", "/api/v1/proposals", { token: null })).headers.get("cache-control"), "no-store");
   assert.match((await call(e, "GET", "/api/v1/projects", { token: null })).headers.get("cache-control"), /public/);
 });
+
+test("the permission check comes before the lookup: a submit token gets 403 even for an id that does not exist", async () => {
+  const r = await call(env(), "PATCH", "/api/v1/proposals/00000000-0000-0000-0000-000000000000", { body: { status: "declined" } });
+  assert.equal(r.status, 403);
+});

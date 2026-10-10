@@ -89,6 +89,7 @@ export async function handle(request, env) {
 
   const one = /^\/api\/v1\/proposals\/([0-9a-f-]{36})$/.exec(path);
   if (one) {
+    if (request.method === "PATCH" && role !== "admin") return fail(403, "only a person (the admin token) can change a proposal's status");
     const rec = await env.store.get(one[1]);
     if (!rec) return fail(404, "no such proposal");
     if (request.method === "GET") return json(200, { ok: true, proposal: own(rec) });

@@ -61,3 +61,51 @@ export function buildDepImage({ docker, projectDir, baseDigest, noCache = true }
     rmSync(ctx, { recursive: true, force: true });
   }
 }
+
+// ---- Python: same idea, pip instead of npm -------------------------------------------------------------------------------------------
+
+const REQ = /^([A-Za-z0-9][A-Za-z0-9._-]*)(\[[A-Za-z0-9,._-]+\])?==([A-Za-z0-9._+!-]+)(\s*;[^#]*?)?((?:\s+--hash=sha256:[a-f0-9]{64})+)\s*$/;
+
+/** Problems with a hashed requirements.txt. Every line must be name==version with sha256 hashes; no URLs, VCS, paths, includes or alternate indexes. */
+export function checkRequirements(text) {
+  if (typeof text !== "string") return ["requirements are not text"];
+  const p = [];
+  const joined = text.replace(/\\\r?\n/g, " ");
+  let n = 0;
+  for (const raw of joined.split("\n")) {
+    const line = raw.replace(/(^|\s)#.*$/, "").trim();
+    if (!line) continue;
+    n++;
+    if (/^-/.test(line)) { p.push(`option line refused: ${line.slice(0, 40)}`); continue; }
+    if (/:\/\/|@|git\+|file:|\.\.|\/|\\/.test(line.replace(/--hash=sha256:[a-f0-9]{64}/g, ""))) { p.push(`not a plain registry pin: ${line.slice(0, 50)}`); continue; }
+    if (!REQ.test(line)) p.push(`needs name==version and --hash=sha256:...: ${line.slice(0, 50)}`);
+  }
+  if (n === 0) p.push("no requirements");
+  return p;
+}
+
+export const pyDockerfile = (baseDigest) => `FROM ${baseDigest}
+WORKDIR /work
+COPY requirements.txt ./
+RUN pip install --no-cache-dir --require-hashes --only-binary :all: --no-deps --disable-pip-version-check -r requirements.txt && rm -f requirements.txt
+`;
+
+/** Python twin of buildDepImage. Installs into the image's own site-packages; wheels only (a source build would run setup.py). */
+export function buildPyDepImage({ docker, projectDir, baseDigest, noCache = true }) {
+  if (!/^[a-z0-9._\/-]+@sha256:[a-f0-9]{64}$/.test(baseDigest)) return { ok: false, refused: "base image must be named by digest" };
+  let text;
+  try { text = readFileSync(join(projectDir, "requirements.txt"), "utf8"); } catch (e) { return { ok: false, refused: `cannot read requirements.txt: ${e.message}` }; }
+  const bad = checkRequirements(text);
+  if (bad.length > 0) return { ok: false, refused: `requirements refused: ${bad.slice(0, 5).join("; ")}${bad.length > 5 ? ` (+${bad.length - 5} more)` : ""}` };
+  const ctx = mkdtempSync(join(tmpdir(), "cc-pydeps-"));
+  try {
+    writeFileSync(join(ctx, "requirements.txt"), text);
+    writeFileSync(join(ctx, "Dockerfile"), pyDockerfile(baseDigest));
+    const sha = createHash("sha256").update(text).digest("hex").slice(0, 12);
+    const r = sh(docker, ["build", ...(noCache ? ["--no-cache"] : []), "-q", "--label", `cc.requirements=${sha}`, ctx]);
+    if (r.status !== 0) return { ok: false, refused: `docker build failed: ${(r.stderr || "").trim().slice(-400)}` };
+    return { ok: true, image: r.stdout.trim(), lockSha: sha };
+  } finally {
+    rmSync(ctx, { recursive: true, force: true });
+  }
+}

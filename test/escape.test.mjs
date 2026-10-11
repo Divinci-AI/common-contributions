@@ -162,3 +162,32 @@ test("many short-lived processes do not exhaust the pids limit (--init reaps the
   assert.match(g.stdout, /RAN:zombies/); assert.match(g.stdout, /DONE/);
   assert.ok(Number(/COUNT:(\d+)/.exec(g.stdout)?.[1]) < 30, g.stdout);
 });
+
+// Python: needs an image built with `build-deps --python` (network), so it only runs when CC_PY_IMAGE names one.
+const PYIMG = process.env.CC_PY_IMAGE;
+test("python image: pytest runs with no network and a read-only source (ENETUNREACH, EROFS)", { skip: !DOCKER || !PYIMG ? "CC_PY_IMAGE not set" : false }, async () => {
+  const { mkdtempSync, writeFileSync, rmSync, realpathSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const dir = mkdtempSync(join(realpathSync(tmpdir()), "cc-py-"));
+  writeFileSync(join(dir, "test_probe.py"), [
+    "import socket, pathlib",
+    "def test_net():",
+    "    s = socket.socket(); s.settimeout(2)",
+    "    try:",
+    "        s.connect(('1.1.1.1', 443)); assert False",
+    "    except OSError as e:",
+    "        print('RAN:net', e.errno)",
+    "def test_ro():",
+    "    try:",
+    "        pathlib.Path('planted.txt').write_text('x'); assert False",
+    "    except OSError as e:",
+    "        print('RAN:ro', e.errno)",
+  ].join("\n"));
+  try {
+    const r = runContained({ docker: DOCKER, image: PYIMG, srcDir: dir, cmd: ["python", "-m", "pytest", "-q", "-s", "-p", "no:cacheprovider"], runId: "py" + Date.now() });
+    assert.equal(r.ran, true, r.refused);
+    assert.equal(r.ok, true, r.stdout + r.stderr);
+    assert.match(r.stdout, /RAN:net 101/);
+    assert.match(r.stdout, /RAN:ro 30/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

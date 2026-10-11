@@ -27,7 +27,7 @@ import { applyFiles, runChecked } from "./verify.mjs";
 import { coverageReport, unacknowledgedTests } from "./coverage.mjs";
 import { runMutations } from "./mutate.mjs";
 import { runContained, readRuntime } from "./container.mjs";
-import { buildDepImage } from "./depimage.mjs";
+import { buildDepImage, buildPyDepImage } from "./depimage.mjs";
 import { writeFileSync as writeFile } from "node:fs";
 import { copySource } from "./sourcecopy.mjs";
 import { randomBytes } from "node:crypto";
@@ -211,8 +211,8 @@ if (cmd === "status") {
   const flag = (n) => { const i = rest.indexOf(n); return i === -1 ? undefined : rest[i + 1]; };
   const project = flag("--project"), base = flag("--base");
   const docker = flag("--docker") ?? spawnSync("/usr/bin/which", ["docker"], { encoding: "utf8" }).stdout.trim();
-  if (!project || !base) { console.error("usage: build-deps --project <dir with package.json + package-lock.json> --base <name@sha256:digest> [--docker /abs/docker]"); process.exit(2); }
-  const r = buildDepImage({ docker, projectDir: project, baseDigest: base });
+  if (!project || !base) { console.error("usage: build-deps --project <dir with package.json + package-lock.json, or with --python a hashed requirements.txt> --base <name@sha256:digest> [--python] [--docker /abs/docker]"); process.exit(2); }
+  const r = (rest.includes("--python") ? buildPyDepImage : buildDepImage)({ docker, projectDir: project, baseDigest: base });
   if (!r.ok) { console.error(r.refused); process.exit(2); }
   console.log(r.image);
 } else if (cmd === "pin-runtime") {

@@ -65,7 +65,7 @@ export function checkInspect(i, { image, srcDir, limits = LIMITS }) {
   want(mounts.length === 1 && mounts[0].Source === srcDir && mounts[0].Destination === "/work/src" && mounts[0].RW === false, "mounts are not exactly the read-only source");
   want(c.WorkingDir === "/work/src" || /^\/work\/src\/[A-Za-z0-9._\/-]+$/.test(c.WorkingDir ?? "") && !c.WorkingDir.split("/").includes(".."), `working dir is ${c.WorkingDir}`);
   want(!mounts.some((m) => /docker\.sock/.test(m.Source ?? "")), "the docker socket is mounted");
-  const env = (c.Env ?? []).filter((e) => !/^(PATH|HOSTNAME|NODE_VERSION|YARN_VERSION)=/.test(e)).sort();
+  const env = (c.Env ?? []).filter((e) => !/^(PATH|HOSTNAME|NODE_VERSION|YARN_VERSION|PYTHON_VERSION|PYTHON_SHA256|GPG_KEY)=/.test(e)).sort();
   want(JSON.stringify(env) === JSON.stringify(["CI=1", "HOME=/tmp"]), `environment is ${JSON.stringify(env)}`);
   return p;
 }

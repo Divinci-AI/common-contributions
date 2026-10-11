@@ -9,7 +9,7 @@
  * broke-build (the mutant did not even parse/compile: NOT counted as caught, it proves nothing about the test) ·
  * skipped (pattern not found exactly once).
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { lstatSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const BUILD_BREAK = /SyntaxError|IndentationError|TabError|ImportError|errors? during collection|ERROR collecting|Transform failed|Unexpected token|Expected [^\n]*but found|error TS\d+|Cannot find module/i;
@@ -31,10 +31,22 @@ export function validateMutations(list) {
   return list;
 }
 
+/**
+ * Swap a file's contents by writing a NEW file and renaming it over the old one (never an in-place write). A container that
+ * bind-mounts the directory can otherwise read the old size/contents of a file rewritten in place: a longer mutant arrives
+ * truncated and is misreported as a build break.
+ */
+function replaceFile(abs, bytes) {
+  const tmp = `${abs}.cc-swap`;
+  writeFileSync(tmp, bytes, { mode: statSync(abs).mode & 0o7777 });
+  renameSync(tmp, abs);
+}
+
 /** @param {{ root: string, sourcePath: string, mutations: Array<{id:string,old:string,new:string,kind?:string}>, runTest: () => {ok:boolean, output:string} }} o */
 export function runMutations({ root, sourcePath, mutations, runTest }) {
   validateMutations(mutations);
   const abs = join(root, sourcePath);
+  if (lstatSync(abs).isSymbolicLink()) throw new Error(`${sourcePath} is a symlink; refusing to replace it with a regular file`);
   const original = readFileSync(abs); // bytes, not text: restoration must be byte-identical
   const text = original.toString("utf8");
 
@@ -51,11 +63,11 @@ export function runMutations({ root, sourcePath, mutations, runTest }) {
       }
       // Every mutant is built from the ORIGINAL text, and the outer finally restores the bytes, so a runner that
       // throws mid-mutation still leaves the source intact.
-      writeFileSync(abs, text.replace(m.old, () => m.new));
+      replaceFile(abs, text.replace(m.old, () => m.new));
       results.push({ id: m.id, kind: m.kind, outcome: classify(runTest()) });
     }
   } finally {
-    writeFileSync(abs, original);
+    replaceFile(abs, original);
   }
   const tally = (o) => results.filter((r) => r.outcome === o).length;
   return { results, caught: tally("caught"), survived: tally("survived"), brokeBuild: tally("broke-build"), skipped: tally("skipped"), restored: Buffer.compare(readFileSync(abs), original) === 0 };

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, linkSync, mkdirSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { classify, runMutations, validateMutations } from "../src/mutate.mjs";
 import { tmp } from "./helpers.mjs";
@@ -92,4 +92,46 @@ test("classify: a Python mutant that breaks the module at import or collection i
 test("classify: an ordinary Python test failure is still caught", () => {
   assert.equal(classify({ ok: false, output: "FAILED tests/test_a.py::test_x - assert 1 == 2\n1 failed, 3 passed" }), "caught");
   assert.equal(classify({ ok: false, output: "E   NameError: name 'y' is not defined\n1 failed" }), "caught");
+});
+
+// A file rewritten IN PLACE can be read stale by a container through a bind mount (the size attribute is cached): a longer
+// mutant is seen truncated and misreported as a build break. Found on a real run (toolz). Each mutant is therefore written to
+// a NEW file and renamed over the source, and the restore is done the same way. A hard link to the original inode tells the
+// two apart: an in-place write changes what the link sees, a rename does not.
+test("a mutant is swapped in as a NEW file, never written in place", () => {
+  const root = setup();
+  const abs = join(root, "src/m.js");
+  linkSync(abs, join(root, "src/m.keep"));
+  const seen = [];
+  const out = runMutations({
+    root, sourcePath: "src/m.js",
+    mutations: [{ id: "a", old: "x > 1", new: "x >= 1" }, { id: "b", old: 'x === "a"', new: 'x !== "a"' }],
+    runTest: () => { seen.push({ mutated: readFileSync(abs, "utf8"), link: readFileSync(join(root, "src/m.keep"), "utf8") }); return fakeRun(root)(); },
+  });
+  assert.equal(seen.length, 3);
+  assert.equal(seen[1].mutated.includes("x >= 1"), true, "the mutant was in place for the run");
+  for (const s of seen) assert.equal(s.link, SRC, "the original inode was never written to");
+  assert.equal(out.restored, true);
+  assert.equal(readFileSync(abs, "utf8"), SRC);
+});
+test("a stray temporary file is never left behind", () => {
+  const root = setup();
+  runMutations({ root, sourcePath: "src/m.js", mutations: [{ id: "a", old: "x > 1", new: "x >= 1" }], runTest: fakeRun(root) });
+  assert.deepEqual(readdirSync(join(root, "src")).sort(), ["m.js"]);
+});
+
+test("the source file keeps its permissions through the swap and the restore", () => {
+  const root = setup();
+  const abs = join(root, "src/m.js");
+  chmodSync(abs, 0o755);
+  let modeDuring;
+  runMutations({ root, sourcePath: "src/m.js", mutations: [{ id: "a", old: "x > 1", new: "x >= 1" }], runTest: () => { modeDuring = statSync(abs).mode & 0o777; return fakeRun(root)(); } });
+  assert.equal(modeDuring, 0o755);
+  assert.equal(statSync(abs).mode & 0o777, 0o755);
+});
+test("a symlinked source is refused rather than replaced by a plain file", () => {
+  const root = setup();
+  symlinkSync(join(root, "src/m.js"), join(root, "src/link.js"));
+  assert.throws(() => runMutations({ root, sourcePath: "src/link.js", mutations: [{ id: "a", old: "x > 1", new: "x >= 1" }], runTest: fakeRun(root) }), /symlink/);
+  assert.equal(readFileSync(join(root, "src/m.js"), "utf8"), SRC);
 });

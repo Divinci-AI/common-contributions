@@ -46,3 +46,10 @@ test("selectRunnableTasks needs BOTH the label and a parseable scope", () => {
   ];
   assert.deepEqual(selectRunnableTasks(issues).map((t) => t.number), [1]);
 });
+
+import { isConfigFile } from "../src/scope.mjs";
+test("an issue cannot make a dependency or config file writable: allowedPaths drops it", () => {
+  const body = "## Done when (one file: `package.json`, `orchestrator/vitest.config.ts`, `orchestrator/src/a.test.ts`)\n";
+  assert.deepEqual(allowedPaths(body), ["orchestrator/src/a.test.ts"]);
+  assert.ok(isConfigFile("x/tsconfig.json") && !isConfigFile("x/src/tsconfig-notes.test.ts"));
+});

@@ -17,12 +17,19 @@ export function allowedPaths(issueBody) {
   const body = String(issueBody ?? "");
   const header = /^##\s*Done when[^\n]*\((?:one file|files?):\s*([^)]*)\)/im.exec(body);
   if (!header) return [];
-  return [...header[1].matchAll(/`([^`]+)`/g)].map((m) => m[1]).filter(isSafeRelativePath);
+  return [...header[1].matchAll(/`([^`]+)`/g)].map((m) => m[1]).filter((p) => isSafeRelativePath(p) && !isConfigFile(p));
 }
 
 export function isSafeRelativePath(p) {
   return typeof p === "string" && p.length > 0 && !p.startsWith("/") && !p.includes("..") && !p.includes("\\") && !/^[a-z]+:/i.test(p);
 }
+
+/**
+ * Files that change what runs (dependencies, install scripts, test and compiler config). A task may never touch them: the
+ * dependency image is built from these, so letting a contribution edit them would make the image and the code diverge.
+ */
+const CONFIG_FILE = /(^|\/)(package\.json|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|\.npmrc|\.yarnrc(\.yml)?|requirements[^/]*\.txt|pyproject\.toml|setup\.py|setup\.cfg|conftest\.py|pytest\.ini|tox\.ini|vitest\.config\.[^/]+|vitest\.workspace\.[^/]+|jest\.config\.[^/]+|tsconfig[^/]*\.json)$/;
+export const isConfigFile = (p) => CONFIG_FILE.test(String(p));
 
 /** Files changed outside the allowed set, or empty list when the diff stays in scope. */
 export function diffScopeViolations(changedFiles, allowed) {

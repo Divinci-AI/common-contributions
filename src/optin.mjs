@@ -107,6 +107,8 @@ export function parseStrictJson(input) {
 /** Letters, numbers, punctuation and the ordinary space only: no controls, bidi controls, zero-width, separators, tabs or newlines. */
 const BAD_RANGES = [[0x00, 0x1f], [0x7f, 0x9f], [0xad, 0xad], [0x200b, 0x200f], [0x2028, 0x202e], [0x2060, 0x206f], [0xfeff, 0xfeff], [0xfff9, 0xfffb], [0xd800, 0xdfff]];
 export const isPrintable = (s) => typeof s === "string" && s === s.normalize("NFC") && ![...s].some((ch) => { const c = ch.codePointAt(0); return BAD_RANGES.some(([lo, hi]) => c >= lo && c <= hi); });
+/** Hidden or control characters in free text (newline, carriage return and tab are allowed: this is for files and PR text). Returns the code points found. */
+export const hiddenChars = (s) => [...String(s)].filter((ch) => { const c = ch.codePointAt(0); return c !== 9 && c !== 10 && c !== 13 && BAD_RANGES.some(([lo, hi]) => c >= lo && c <= hi); }).map((ch) => "U+" + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, "0"));
 /** No markup, links, images or mentions in text that lands in a PR. */
 export const isPlainText = (s) => isPrintable(s) && !/[<>`@\\]|\]\(|https?:|www\./i.test(s);
 

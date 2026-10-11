@@ -28,6 +28,7 @@ import { coverageReport, unacknowledgedTests } from "./coverage.mjs";
 import { runMutations } from "./mutate.mjs";
 import { readRuntime, LIMITS } from "./container.mjs";
 import { buildDepImage, buildPyDepImage } from "./depimage.mjs";
+import { pinRequirements } from "./hashpin.mjs";
 import { writeFileSync as writeFile } from "node:fs";
 import { copySource, copyFromGit, resolveBase, attributeProblems, baseModeProblems } from "./sourcecopy.mjs";
 import { resolveProfile, testRelative } from "./profile.mjs";
@@ -260,6 +261,16 @@ if (cmd === "status") {
   const r = (rest.includes("--python") ? buildPyDepImage : buildDepImage)({ docker, projectDir: project, baseDigest: base });
   if (!r.ok) { console.error(r.refused); process.exit(2); }
   console.log(r.image);
+} else if (cmd === "pin-requirements") {
+  // Python hash-pin step: plain requirements in, hashed wheels-only requirements.txt out. Pip runs in a throwaway container; nothing from the project runs.
+  const flag = (n) => { const i = rest.indexOf(n); return i === -1 ? undefined : rest[i + 1]; };
+  const specFile = flag("--spec"), base = flag("--base"), out = flag("--out");
+  const docker = dockerPath(rest);
+  if (!specFile || !base || !out) { console.error("usage: pin-requirements --spec <plain requirements file> --base <name@sha256:digest> --out <requirements.txt to write> [--docker /abs/docker]"); process.exit(2); }
+  const r = pinRequirements({ docker, baseDigest: base, specText: readFileSync(specFile, "utf8") });
+  if (!r.ok) { console.error(r.refused); process.exit(2); }
+  writeFile(out, r.requirements);
+  console.log(`wrote ${out} (${r.requirements.trim().split("\n").length} pinned wheels)`);
 } else if (cmd === "pin-runtime") {
   // Runs the escape tests on THIS runtime first; the pin is written only if they pass.
   const flag = (n) => { const i = rest.indexOf(n); return i === -1 ? undefined : rest[i + 1]; };
@@ -375,6 +386,6 @@ if (cmd === "status") {
   try { out = runMutations({ root, sourcePath: source, mutations: JSON.parse(readFileSync(file, "utf8")), runTest }); } finally { if (copy) rmTree(copy, { recursive: true, force: true }); }
   console.warn(JSON.stringify(out, null, 2));
 } else {
-  console.error("usage: status | stop [reason] | clear-stop --yes | dry-run <issues.json> | run-one ... | build-deps ... | pin-runtime ... | verify-record ... | optin-check ... | publish ... | cleanup ... | coverage ... | mutate ...");
+  console.error("usage: status | stop [reason] | clear-stop --yes | dry-run <issues.json> | run-one ... | build-deps ... | pin-requirements ... | pin-runtime ... | verify-record ... | optin-check ... | publish ... | cleanup ... | coverage ... | mutate ...");
   process.exit(2);
 }

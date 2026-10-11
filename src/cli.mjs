@@ -24,7 +24,7 @@ import { selectRunnableTasks } from "./scope.mjs";
 import { buildMessages, makeOllamaAgent } from "./adapters/ollama.mjs";
 import { makeReplayAgent } from "./adapters/replay.mjs";
 import { applyFiles, runChecked } from "./verify.mjs";
-import { coverageReport, unacknowledgedTests } from "./coverage.mjs";
+import { coverageReport, strongestIndirect, unacknowledgedTests } from "./coverage.mjs";
 import { runMutations } from "./mutate.mjs";
 import { readRuntime, LIMITS } from "./container.mjs";
 import { buildDepImage, buildPyDepImage } from "./depimage.mjs";
@@ -123,17 +123,17 @@ if (cmd === "status") {
   const sibling = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".test.ts")).map((f) => join(dir, f)).filter((f) => statSync(f).size < 4000).sort()[0] : undefined;
   const styleExample = sibling ? readFileSync(sibling, "utf8").slice(0, 3000) : "";
 
-  // COVERAGE GATE: every existing test that already imports a module this issue names must be NAMED in the issue.
+  // COVERAGE GATE: every existing test that already covers a module this issue names (imports it, or reaches it through other files and uses it) must be NAMED in the issue.
   // (An issue was once filed for a module that already had tests, because the check looked only for a sibling file.)
   const existingTests = {};
   const unacknowledged = [];
   for (const mod of named) {
     const rep = coverageReport({ root: repo, modulePath: mod, allowed: task.allowed });
     for (const f of unacknowledgedTests(rep, task.body)) unacknowledged.push(`${f} (covers ${mod})`);
-    for (const f of rep.referencingTests.slice(0, 3)) existingTests[f] = readFileSync(join(repo, f), "utf8").slice(0, 6000);
+    for (const f of [...rep.referencingTests, ...strongestIndirect(rep).map((t) => t.test)].slice(0, 3)) existingTests[f] = readFileSync(join(repo, f), "utf8").slice(0, 6000);
   }
   if (unacknowledged.length > 0) {
-    console.error(`refusing: existing tests already import a module this issue names, and the issue does not mention them:\n  ${unacknowledged.join("\n  ")}\nName them in the issue (and say what they do not cover), then re-run.`);
+    console.error(`refusing: existing tests already cover a module this issue names (they import it, or reach it and use it), and the issue does not mention them:\n  ${unacknowledged.join("\n  ")}\nName them in the issue (and say what they do not cover), then re-run.`);
     process.exit(2);
   }
 

@@ -194,7 +194,7 @@ test("coverage gate: run-one REFUSES when an existing test imports the module an
   requests.length = 0;
   const r = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--host", `http://127.0.0.1:${port}`, "--no-verify"], tmp());
   assert.equal(r.status, 2);
-  assert.match(r.stderr, /already import a module this issue names/);
+  assert.match(r.stderr, /already cover a module this issue names/);
   assert.match(r.stderr, /source-yield\.test\.ts/);
   assert.equal(requests.length, 0, "the model must not be called");
 });

@@ -28,7 +28,7 @@ export function runProfileChecks({ docker, image, pin, srcDir, profile, testPath
   const out = [];
   const runId = randomBytes(6).toString("hex");
   for (const c of expandChecks(profile, testRel).filter((x) => !only || x.name === only)) {
-    const r = runContained({ docker, image, srcDir, subdir: profile.subdir, cmd: c.argv, runId: `${runId}-${c.name}`, pin });
+    const r = runContained({ docker, image, srcDir, subdir: profile.subdir, pythonPath: profile.pythonPath ?? "", cmd: c.argv, runId: `${runId}-${c.name}`, pin });
     if (!r.ran) return { ran: false, refused: r.refused, dep, checks: out };
     out.push({ name: c.name, argv: c.argv, status: r.status, ok: r.ok, timedOut: r.timedOut, tail: (r.stdout + r.stderr).split("\n").slice(-20).join("\n") });
   }

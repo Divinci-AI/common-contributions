@@ -29,6 +29,7 @@ export function validateProfile(p) {
   if (p.subdir !== "" && !(PLAIN.test(p.subdir ?? "") && !p.subdir.split("/").includes(".."))) bad.push("subdir must be a plain relative path");
   if (!PLAIN.test(p.depFile ?? "") || p.depFile.split("/").includes("..")) bad.push("depFile must be a plain relative path");
   if (!["cc.lock", "cc.requirements"].includes(p.depLabel)) bad.push("depLabel must be cc.lock or cc.requirements");
+  if (p.pythonPath !== undefined && (p.language !== "python" || typeof p.pythonPath !== "string" || !PLAIN.test(p.pythonPath) || p.pythonPath.split("/").includes("..") || p.pythonPath.startsWith("-"))) bad.push("pythonPath must be a plain relative path, and only a python profile may have one");
   if (!Array.isArray(p.checks) || p.checks.length === 0) bad.push("no checks");
   const names = new Set();
   for (const c of p.checks ?? []) {

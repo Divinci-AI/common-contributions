@@ -151,3 +151,42 @@ test("subdir sets the workdir and is validated", () => {
   assert.equal(a[a.indexOf("--workdir") + 1], "/work/src/orchestrator");
   for (const bad of ["..", "a/../b", "/abs", "a b", "a;b"]) assert.throws(() => buildCreateArgs({ image: IMAGE, name: "n", runId: "r", srcDir: SRC, cmd: ["true"], subdir: bad }), /subdir/);
 });
+
+// ---- Python projects: the image's own LANG, and a PYTHONPATH the profile asks for (src/ layouts) ----
+test("an image that sets LANG=C.UTF-8 (the official python images do) passes", () => {
+  const i = good(); i.Config.Env.push("LANG=C.UTF-8", "PYTHON_VERSION=3.12.15", "GPG_KEY=abc");
+  assert.deepEqual(checkInspect(i, ctx), []);
+});
+test("any other LANG is refused", () => {
+  const i = good(); i.Config.Env.push("LANG=en_US.UTF-8");
+  assert.ok(checkInspect(i, ctx).some((m) => /environment/.test(m)));
+});
+test("pythonPath adds exactly one PYTHONPATH under the read-only source, and nothing without it", () => {
+  const base = { image: IMAGE, name: "n", runId: "r", srcDir: SRC, cmd: ["python"] };
+  assert.ok(!buildCreateArgs(base).some((a) => /PYTHONPATH/.test(a)));
+  const a = buildCreateArgs({ ...base, pythonPath: "src" });
+  assert.equal(a[a.indexOf("PYTHONPATH=/work/src/src") - 1], "--env");
+  assert.equal(a.filter((x) => /^PYTHONPATH=/.test(x)).length, 1);
+});
+for (const bad of ["../x", "/abs", "a b", "a;b", "src/../..", "-e"]) test(`pythonPath refused: ${bad}`, () => assert.throws(() => buildCreateArgs({ image: IMAGE, name: "n", runId: "r", srcDir: SRC, cmd: ["python"], pythonPath: bad }), /pythonPath/));
+test("preflight expects exactly the PYTHONPATH that was asked for", () => {
+  const ok = good(); ok.Config.Env.push("PYTHONPATH=/work/src/src");
+  assert.deepEqual(checkInspect(ok, { ...ctx, pythonPath: "src" }), []);
+  assert.ok(checkInspect(good(), { ...ctx, pythonPath: "src" }).some((m) => /environment/.test(m)), "missing");
+  const wrong = good(); wrong.Config.Env.push("PYTHONPATH=/tmp/evil");
+  assert.ok(checkInspect(wrong, { ...ctx, pythonPath: "src" }).some((m) => /environment/.test(m)), "wrong value");
+  assert.ok(checkInspect(ok, ctx).some((m) => /environment/.test(m)), "present but not asked for");
+});
+
+test("runContained passes pythonPath into the create argv and into the preflight", () => {
+  const withPath = good(); withPath.Config.Env.push("PYTHONPATH=/work/src/src");
+  const f = fakeDocker({ inspect: withPath });
+  const r = runContained({ docker: f.bin, image: IMAGE, srcDir: SRC, cmd: ["true"], runId: "t8", pythonPath: "src" });
+  assert.equal(r.ran, true);
+  assert.ok(f.argv().split("\n").find((l) => l.startsWith("create")).includes("PYTHONPATH=/work/src/src"), "create argv lacks PYTHONPATH");
+  // the daemon reports no PYTHONPATH although one was asked for: the preflight must notice and refuse
+  const f2 = fakeDocker({ inspect: good() });
+  const r2 = runContained({ docker: f2.bin, image: IMAGE, srcDir: SRC, cmd: ["true"], runId: "t9", pythonPath: "src" });
+  assert.equal(r2.ran, false); assert.match(r2.refused, /environment/);
+  assert.ok(!f2.calls().includes("start"));
+});

@@ -14,7 +14,11 @@ export const USER = "65532:65532";
 export const dockerEnv = (extra = {}) => ({ PATH: "/usr/bin:/bin", ...extra });
 
 /** argv for `docker create`. Pure. `image` must be an image ID or digest (never a tag): runs never pull. */
-export function buildCreateArgs({ image, name, runId, srcDir, cmd, limits = LIMITS, subdir = "" }) {
+const PLAIN_REL = /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
+const badPythonPath = (p) => p !== "" && (typeof p !== "string" || !PLAIN_REL.test(p) || p.split("/").includes("..") || p.startsWith("-"));
+
+export function buildCreateArgs({ image, name, runId, srcDir, cmd, limits = LIMITS, subdir = "", pythonPath = "" }) {
+  if (badPythonPath(pythonPath)) throw new Error("pythonPath must be a plain relative path");
   if (subdir && (!/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/.test(subdir) || subdir.split("/").includes(".."))) throw new Error("subdir must be a plain relative path");
   if (!/^(sha256:)?[a-f0-9]{12,64}$|@sha256:[a-f0-9]{64}$/.test(image)) throw new Error("image must be an image id or digest, not a tag");
   if (!isAbsolute(srcDir)) throw new Error("srcDir must be absolute");
@@ -28,12 +32,13 @@ export function buildCreateArgs({ image, name, runId, srcDir, cmd, limits = LIMI
     "--tmpfs", "/tmp:rw,nosuid,size=64m", "--tmpfs", "/work/out:rw,nosuid,size=64m",
     "--mount", `type=bind,source=${srcDir},target=/work/src,readonly`,
     "--workdir", subdir ? `/work/src/${subdir}` : "/work/src", "--env", "CI=1", "--env", "HOME=/tmp",
+    ...(pythonPath ? ["--env", `PYTHONPATH=/work/src/${pythonPath}`] : []),
     image, ...cmd,
   ];
 }
 
 /** Compare the inspect output of the CREATED container with what we asked for. Returns the list of problems (empty = fine). */
-export function checkInspect(i, { image, srcDir, limits = LIMITS }) {
+export function checkInspect(i, { image, srcDir, limits = LIMITS, pythonPath = "" }) {
   const p = [];
   const h = i?.HostConfig ?? {}, c = i?.Config ?? {};
   const want = (cond, msg) => { if (!cond) p.push(msg); };
@@ -65,8 +70,9 @@ export function checkInspect(i, { image, srcDir, limits = LIMITS }) {
   want(mounts.length === 1 && mounts[0].Source === srcDir && mounts[0].Destination === "/work/src" && mounts[0].RW === false, "mounts are not exactly the read-only source");
   want(c.WorkingDir === "/work/src" || /^\/work\/src\/[A-Za-z0-9._\/-]+$/.test(c.WorkingDir ?? "") && !c.WorkingDir.split("/").includes(".."), `working dir is ${c.WorkingDir}`);
   want(!mounts.some((m) => /docker\.sock/.test(m.Source ?? "")), "the docker socket is mounted");
-  const env = (c.Env ?? []).filter((e) => !/^(PATH|HOSTNAME|NODE_VERSION|YARN_VERSION|PYTHON_VERSION|PYTHON_SHA256|GPG_KEY)=/.test(e)).sort();
-  want(JSON.stringify(env) === JSON.stringify(["CI=1", "HOME=/tmp"]), `environment is ${JSON.stringify(env)}`);
+  const env = (c.Env ?? []).filter((e) => !/^(PATH|HOSTNAME|NODE_VERSION|YARN_VERSION|PYTHON_VERSION|PYTHON_SHA256|GPG_KEY)=/.test(e) && e !== "LANG=C.UTF-8").sort();
+  const wantEnv = ["CI=1", "HOME=/tmp", ...(pythonPath ? [`PYTHONPATH=/work/src/${pythonPath}`] : [])].sort();
+  want(JSON.stringify(env) === JSON.stringify(wantEnv), `environment is ${JSON.stringify(env)}`);
   return p;
 }
 
@@ -84,7 +90,7 @@ export const runtimeMismatch = (actual, pin) => (pin && ["engine", "kernel", "os
  * Create, inspect, check, start, reap. Never throws for a failing command; returns {refused} when preflight fails.
  * `docker` must be an absolute path (a shim earlier on PATH cannot stand in for it).
  */
-export function runContained({ docker, image, srcDir, cmd, runId, limits = LIMITS, createArgsOverride, pin, subdir = "" }) {
+export function runContained({ docker, image, srcDir, cmd, runId, limits = LIMITS, createArgsOverride, pin, subdir = "", pythonPath = "" }) {
   if (!isAbsolute(docker)) throw new Error("docker must be an absolute path");
   if (pin) {
     const actual = readRuntime(docker);
@@ -92,7 +98,7 @@ export function runContained({ docker, image, srcDir, cmd, runId, limits = LIMIT
     if (bad.length > 0) return { ran: false, refused: `runtime differs from the tested one (${bad.join("; ")}); the boundary was only tested on the pinned runtime`, runtime: actual };
   }
   const name = `cc-${runId}`;
-  const args = buildCreateArgs({ image, name, runId, srcDir, cmd, limits, subdir });
+  const args = buildCreateArgs({ image, name, runId, srcDir, cmd, limits, subdir, pythonPath });
   const created = sh(docker, createArgsOverride ? createArgsOverride(args) : args);
   if (created.status !== 0) return { ran: false, refused: `docker create failed: ${(created.stderr || "").trim().slice(0, 300)}` };
   const reap = () => { sh(docker, ["kill", name]); sh(docker, ["rm", "-fv", name]); };
@@ -100,7 +106,7 @@ export function runContained({ docker, image, srcDir, cmd, runId, limits = LIMIT
     const ins = sh(docker, ["inspect", name]);
     let parsed;
     try { parsed = JSON.parse(ins.stdout)[0]; } catch { parsed = undefined; }
-    const problems = checkInspect(parsed, { image, srcDir, limits });
+    const problems = checkInspect(parsed, { image, srcDir, limits, pythonPath });
     if (problems.length > 0) return { ran: false, refused: `preflight failed: ${problems.join("; ")}` };
     const r = sh(docker, ["start", "-a", name], { timeout: limits.timeoutMs, maxBuffer: limits.maxOutputBytes });
     const timedOut = r.error?.code === "ETIMEDOUT" || r.signal === "SIGTERM";

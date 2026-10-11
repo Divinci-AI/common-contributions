@@ -217,3 +217,22 @@ test("the shipped reviewed-harness list is well formed (and EMPTY until a releas
   const j = JSON.parse(readFileSync(new URL("../reviewed-harness-trees.json", import.meta.url), "utf8"));
   assert.ok(Array.isArray(j.trees) && j.trees.every((t) => /^[a-f0-9]{64}$/.test(t)));
 });
+
+// ---- pythonPath: a src/ layout project needs its package directory importable from the read-only source ----
+test("a python profile may name a pythonPath that is a plain relative path", () => {
+  assert.deepEqual(validateProfile({ ...PROFILES.python, pythonPath: "src" }), []);
+  assert.deepEqual(validateProfile({ ...PROFILES.python, pythonPath: "lib/python" }), []);
+});
+for (const bad of ["../x", "/abs", "a b", "a;b", "-e", 7]) test(`pythonPath refused in a profile: ${String(bad)}`, () => assert.ok(validateProfile({ ...PROFILES.python, pythonPath: bad }).some((m) => /pythonPath/.test(m))));
+test("pythonPath is for python profiles only", () => assert.ok(validateProfile({ ...PROFILES.node, pythonPath: "src" }).some((m) => /pythonPath/.test(m))));
+
+test("verifier: the profile's pythonPath reaches the container's create argv", () => {
+  const src = tmp(); writeFileSync(join(src, "requirements.txt"), "R");
+  const log = join(tmp(), "argv");
+  const docker = join(tmp(), "docker");
+  writeFileSync(docker, `#!/bin/sh\nif [ "$1" = image ]; then echo "${depSha("R")}"; exit 0; fi\nif [ "$1" = create ]; then printf '%s\\n' "$@" > "${log}"; exit 1; fi\nexit 1\n`, { mode: 0o755 });
+  runProfileChecks({ docker, image: "sha256:" + "a".repeat(64), pin: undefined, srcDir: src, profile: { ...PROFILES.python, pythonPath: "src" }, testPath: "tests/test_a.py" });
+  assert.ok(readFileSync(log, "utf8").split("\n").includes("PYTHONPATH=/work/src/src"));
+  runProfileChecks({ docker, image: "sha256:" + "a".repeat(64), pin: undefined, srcDir: src, profile: PROFILES.python, testPath: "tests/test_a.py" });
+  assert.ok(!readFileSync(log, "utf8").includes("PYTHONPATH"), "no pythonPath, no PYTHONPATH");
+});

@@ -171,7 +171,7 @@ disclosure_line: "AI-assisted; reviewed by a human before submission"</pre>
           <li>Two small modules, one model family writing tests, one author per mutation set.</li>
           <li>In the dry run, the budget cap and measured token counts were never exercised (a later real run of the hosted adapter is in the status table above). The agents ran in a coding assistant that is not billed per token.</li>
           <li>The count of tools an agent used is passed in by whoever runs the harness. The harness cannot verify it.</li>
-          <li>There is no operating-system sandbox. The design depends on the agent returning text.</li>
+          <li>Model-written code is not yet run in a container by default. A container runner and its escape tests are in the repo but have not passed an end-to-end run through the command line, so verification is refused unless a person passes a flag to run it on this machine.</li>
           <li>No pull request has been opened from any of this, and no maintainer has reviewed the test files.</li>
         </ul>
       </div>
@@ -194,9 +194,9 @@ disclosure_line: "AI-assisted; reviewed by a human before submission"</pre>
             <tr><td>Coding-agent replay</td><td><span class="lamp built">Built</span></td><td>An agent's reply goes through the same checks. This is how the first runs were done.</td></tr>
             <tr><td>Local model adapter</td><td><span class="lamp part">Mock-tested</span></td><td>Loopback only. Not run against a real model yet.</td></tr>
             <tr><td>Maintainer opt-in file</td><td><span class="lamp part">Designed</span></td><td>Opt-in is by issue label and scope for now.</td></tr>
-            <tr><td>Hosted model, capped API key</td><td><span class="lamp built">Built</span></td><td>Workers AI adapter: usage measured from the provider, an input bound enforced before the call, capped by the ledger. One real run cost $0.0027 (2,904 tokens in, 792 out) and a second was refused by the cap before any call. Not yet reconciled against Cloudflare's own usage figure.</td></tr>
+            <tr><td>Hosted model, capped API key</td><td><span class="lamp part">Partly built</span></td><td>Workers AI adapter: usage measured from the provider, an input bound enforced before the call, capped by the ledger. One real run cost $0.0027 (2,904 tokens in, 792 out) and a second was refused by the cap before any call. Not yet reconciled against Cloudflare's own usage figure.</td></tr>
             <tr><td>Pull request publishing</td><td><span class="lamp none">Not built</span></td><td>Only the publish gate exists. No PR has been opened.</td></tr>
-            <tr><td>Operating-system sandbox</td><td><span class="lamp none">Not built</span></td><td>Today the design relies on the agent returning text.</td></tr>
+            <tr><td>Operating-system sandbox</td><td><span class="lamp none">Not built</span></td><td>A container runner with fail-closed checks and real-docker escape tests is in the repo, but it is not yet the default path and has not passed an end-to-end run through the command line. Until then, verifying model-written code is refused unless a person passes a flag to run it on this machine.</td></tr>
             <tr><td>One-command install</td><td><span class="lamp none">Not built</span></td><td>No package exists.</td></tr>
             <tr><td>Name and domain</td><td><span class="lamp none">Not cleared</span></td><td>Common AI is the name for now. Another organisation, CommonAI, uses a near-identical name; no trademark or domain check has been done and nothing is registered.</td></tr>
             <!-- status:end -->

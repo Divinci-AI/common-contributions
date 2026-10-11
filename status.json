@@ -80,7 +80,7 @@
     },
     {
       "piece": "Hosted model, capped API key",
-      "status": "built",
+      "status": "partly-built",
       "detail": "Workers AI adapter: usage measured from the provider, an input bound enforced before the call, capped by the ledger. One real run cost $0.0027 (2,904 tokens in, 792 out) and a second was refused by the cap before any call. Not yet reconciled against Cloudflare's own usage figure.",
       "modules": [
         "src/adapters/workersai.mjs"
@@ -97,7 +97,7 @@
     {
       "piece": "Operating-system sandbox",
       "status": "not-built",
-      "detail": "Today the design relies on the agent returning text."
+      "detail": "A container runner with fail-closed checks and real-docker escape tests is in the repo, but it is not yet the default path and has not passed an end-to-end run through the command line. Until then, verifying model-written code is refused unless a person passes a flag to run it on this machine."
     },
     {
       "piece": "One-command install",

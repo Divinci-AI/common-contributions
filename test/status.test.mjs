@@ -22,7 +22,7 @@ test("every row has a known status and a piece name", () => {
 });
 
 test("a 'built' or 'mock-tested' row names modules that exist and tests that exist and mention each module", () => {
-  for (const r of rows.filter((x) => x.status === "built" || x.status === "mock-tested")) {
+  for (const r of rows.filter((x) => ["built", "partly-built", "mock-tested"].includes(x.status))) {
     assert.ok(r.modules?.length, `"${r.piece}" claims ${r.status} but names no module`);
     assert.ok(r.tests?.length, `"${r.piece}" claims ${r.status} but names no test`);
     for (const m of r.modules) assert.ok(existsSync(new URL(m, root)), `${m} does not exist`);
@@ -38,7 +38,7 @@ test("a 'built' or 'mock-tested' row names modules that exist and tests that exi
 });
 
 test("a row that is not built does not point at a module (it would be claiming something exists)", () => {
-  for (const r of rows.filter((x) => !["built", "mock-tested"].includes(x.status))) {
+  for (const r of rows.filter((x) => !["built", "partly-built", "mock-tested"].includes(x.status))) {
     assert.ok(!r.modules?.length, `"${r.piece}" is ${r.status} but lists modules`);
   }
 });
@@ -73,5 +73,11 @@ test("no page or README hard-codes a test count (it drifts; the suite is the evi
 test("the egress wording does not claim more than the check does", () => {
   for (const f of ["site/harness/index.html", "site/panel.js"]) {
     assert.ok(!/Only the model endpoint and git are reachable/.test(read(f)), `${f} says the network is restricted, but only the harness's own requests are checked`);
+  }
+});
+
+test("no surface still says the design relies on the agent returning text (a container runner exists)", () => {
+  for (const f of ["status.json", "site/harness/index.html", "README.md", "site/index.html", "site/llms.txt"]) {
+    assert.ok(!/relies on the agent returning text|depends on the agent returning text|No OS-level sandbox/i.test(read(f)), `${f} has the stale sandbox claim`);
   }
 });

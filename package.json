@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "description": "Guard rails for contributing your own AI tokens to opted-in projects: budget, kill switch, secret scan, egress allowlist, scope checks. No model is wired in.",
+  "description": "Guard rails for contributing your own AI tokens to opted-in projects: budget, kill switch, secret scan, egress allowlist, scope checks. Adapters for a local model and a capped hosted model; a container verifier is being finished.",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=22.14.0"

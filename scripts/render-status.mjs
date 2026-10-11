@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 export const STATUSES = {
   built: { cls: "built", label: "Built" },
+  "partly-built": { cls: "part", label: "Partly built" },
   "mock-tested": { cls: "part", label: "Mock-tested" },
   designed: { cls: "part", label: "Designed" },
   "not-built": { cls: "none", label: "Not built" },

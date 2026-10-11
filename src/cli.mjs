@@ -29,10 +29,10 @@ import { runMutations } from "./mutate.mjs";
 import { readRuntime, LIMITS } from "./container.mjs";
 import { buildDepImage, buildPyDepImage } from "./depimage.mjs";
 import { writeFileSync as writeFile } from "node:fs";
-import { copySource, copyFromGit, resolveBase, attributeProblems } from "./sourcecopy.mjs";
+import { copySource, copyFromGit, resolveBase, attributeProblems, baseModeProblems } from "./sourcecopy.mjs";
 import { resolveProfile, testRelative } from "./profile.mjs";
 import { runProfileChecks } from "./verifier.mjs";
-import { buildRecord, verifyRecord } from "./record.mjs";
+import { buildRecord, verifyRecord, harnessIdentity, issueHash, loadOrCreateKey } from "./record.mjs";
 import { loadPin, qualifyRuntime, parseTap } from "./pin.mjs";
 import { cleanup } from "./hygiene.mjs";
 import { fileURLToPath } from "node:url";
@@ -50,6 +50,14 @@ const dockerPath = (flagsArr) => { const i = flagsArr.indexOf("--docker"); retur
 const pinFor = (flagsArr) => { const i = flagsArr.indexOf("--runtime-pin"); return loadPin(i !== -1 ? flagsArr[i + 1] : join(stateDir, "runtime-pin.json")); };
 /** Model output is NOT written to the working tree unless --apply is passed (Michael confirmed 2026-10-11). --out writes it to a directory instead. */
 export const LIVE_WRITE_DEFAULT = false;
+
+/** The repository's origin as "host/owner/name" for display and for the publisher to resolve; null if there is none. Credentials in a URL are dropped. */
+const originOf = (repo) => {
+  const r = spawnSync("/usr/bin/git", ["-C", repo, "remote", "get-url", "origin"], { env: { PATH: "/usr/bin:/bin" }, encoding: "utf8" });
+  if (r.status !== 0) return null;
+  const m = r.stdout.trim().match(/^(?:https?:\/\/(?:[^@\/]*@)?|git@|ssh:\/\/git@)([^\/:]+)[\/:]([^\/]+\/[^\/]+?)(?:\.git)?\/?$/);
+  return m ? `${m[1]}/${m[2]}` : null;
+};
 
 const stateDir = defaultStateDir();
 const kill = new KillSwitch({ stateDir });
@@ -182,7 +190,9 @@ if (cmd === "status") {
       report.outcome = "no-file";
       report.reason = "the model returned no fenced code block";
     } else {
-      const live = flags.includes("--apply") || (LIVE_WRITE_DEFAULT && !flags.includes("--no-apply"));
+      // Host verification runs the project's tools on the working tree, so it cannot check a file that is not there: the host flag implies the write.
+      const hostVerify = flags.includes(HOST_FLAG) && !flags.includes("--no-verify") && !flags.includes(CONTAINER_FLAG);
+      const live = flags.includes("--apply") || hostVerify || (LIVE_WRITE_DEFAULT && !flags.includes("--no-apply"));
       if (live) report.wrote = applyFiles({ root: repo, files: result.files, allowed: task.allowed });
       if (flag("--out")) {
         mkdirSync(flag("--out"), { recursive: true });
@@ -197,7 +207,7 @@ if (cmd === "status") {
           let source;
           if (base) {
             // The source as upstream has it at a recorded commit (no local edits), plus exactly the model's files.
-            const attr = attributeProblems(repo, result.files);
+            const attr = [...attributeProblems(repo, result.files, base), ...baseModeProblems(repo, base, Object.keys(result.files))];
             if (attr.length > 0) throw new Error(`refusing: ${attr.join("; ")}`);
             ({ dir } = copyFromGit(repo, base));
             source = "git-archive";
@@ -211,7 +221,7 @@ if (cmd === "status") {
           for (const c of v.checks ?? []) report[c.name] = { ok: c.ok, tail: c.tail };
           const harnessDir = fileURLToPath(new URL("..", import.meta.url));
           const rec = buildRecord({
-            harness: { commit: resolveBase(harnessDir) }, project: { dir: basename(repo), issue: task.number }, base, source, container: v.ran === true,
+            harness: harnessIdentity(harnessDir), project: { dir: basename(repo) }, origin: originOf(repo), issue: { number: task.number, sha256: issueHash(task.title, task.body) }, key: loadOrCreateKey(stateDir), base, source, container: v.ran === true,
             runtime: v.runtime, pin, image, dep: v.dep, limits: LIMITS, profile: profile.language, files: result.files,
             checks: (v.checks ?? []).map((c) => ({ name: c.name, argv: c.argv, status: c.status, timedOut: c.timedOut, tail: c.tail })), ledger: report.ledger,
           });
@@ -260,7 +270,7 @@ if (cmd === "status") {
 } else if (cmd === "verify-record") {
   const file = rest[0], ti = rest.indexOf("--tree");
   if (!file) { console.error("usage: verify-record <run-record.json> [--tree <dir>]  (with --tree: the files on disk must equal what was checked)"); process.exit(2); }
-  const problems = verifyRecord(JSON.parse(readFileSync(file, "utf8")), ti === -1 ? {} : { treeDir: rest[ti + 1] });
+  const problems = verifyRecord(JSON.parse(readFileSync(file, "utf8")), { ...(ti === -1 ? {} : { treeDir: rest[ti + 1] }), key: loadOrCreateKey(stateDir, { create: false }) });
   if (problems.length > 0) { console.error(problems.join("\n")); process.exit(2); }
   console.log("record is consistent" + (ti === -1 ? "" : " and the tree matches it"));
 } else if (cmd === "cleanup") {

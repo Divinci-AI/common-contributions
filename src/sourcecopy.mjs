@@ -3,10 +3,10 @@
  * node_modules (host-built binaries, a different dependency tree than the lockfile's) never reaches the container.
  * Skips: node_modules, .git, env files, key-looking files, and every symlink (a link could point out of the tree).
  */
-import { cpSync, lstatSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { cpSync, lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 const SKIP_DIRS = new Set(["node_modules", ".git", ".wrangler", ".next", "dist"]);
 const SKIP_FILE = /^(\.env(\..*)?|.*\.(pem|key|p12|pfx)|id_(rsa|ed25519|ecdsa)|\.npmrc|\.netrc)$/i;
@@ -44,25 +44,57 @@ export function resolveBase(repo, ref = "HEAD") {
 }
 
 /**
- * The source at a recorded commit, exactly as upstream has it: no local edits, no untracked files. Returns {dir, base}; the caller removes dir.
- * `git archive` then `tar` (no pipe, no shell). bsdtar refuses absolute and `..` entries.
+ * The source at a recorded commit, exactly as the commit's tree has it: no local edits, no untracked files, and NOT passed through
+ * `git archive` (which honours the repo's own export-ignore / export-subst) or `checkout-index` (which applies eol and filter conversions).
+ * Reads the tree with ls-tree and the blobs with one `cat-file --batch`, byte for byte. Returns {dir, base}; the caller removes dir.
+ * Symlinks are recreated as symlinks (they point inside a read-only container); submodules (gitlinks) are skipped.
  */
-export function copyFromGit(repo, base) {
+export function copyFromGit(repo, base, { maxBytes = 256 * 1024 * 1024 } = {}) {
+  const ls = run(GIT, ["-C", repo, "ls-tree", "-r", "-z", "--full-tree", base]);
+  if (ls.status !== 0) throw new Error(`git ls-tree failed: ${(ls.stderr || "").trim().slice(0, 200)}`);
+  const entries = ls.stdout.split("\0").filter(Boolean).map((l) => { const m = l.match(/^(\d+) (\w+) ([a-f0-9]{40})\t([\s\S]+)$/); if (!m) throw new Error("unparseable ls-tree line"); return { mode: m[1], type: m[2], sha: m[3], path: m[4] }; });
+  for (const e of entries) {
+    const parts = e.path.split("/");
+    if (e.path.startsWith("/") || parts.some((x) => x === ".." || x === "." || x === "" || x === ".git") || /\0/.test(e.path)) throw new Error(`refusing unsafe path in the tree: ${JSON.stringify(e.path)}`);
+  }
+  const blobs = entries.filter((e) => e.type === "blob");
+  const cat = spawnSync(GIT, ["-C", repo, "cat-file", "--batch"], { env: gitEnv, input: blobs.map((e) => e.sha).join("\n") + "\n", maxBuffer: maxBytes });
+  if (cat.status !== 0) throw new Error(`git cat-file failed: ${String(cat.stderr).slice(0, 200)}`);
+  const out = cat.stdout; let off = 0;
   const dir = mkdtempSync(join(realpathSync(tmpdir()), "cc-src-"));
-  const tarball = join(dir, ".archive.tar");
-  const a = run(GIT, ["-C", repo, "archive", "--format=tar", "-o", tarball, base]);
-  if (a.status !== 0) { rmSync(dir, { recursive: true, force: true }); throw new Error(`git archive failed: ${(a.stderr || "").trim().slice(0, 200)}`); }
-  const x = run(TAR, ["-xf", tarball, "-C", dir, "--no-same-owner"]);
-  rmSync(tarball, { force: true });
-  if (x.status !== 0) { rmSync(dir, { recursive: true, force: true }); throw new Error(`tar failed: ${(x.stderr || "").trim().slice(0, 200)}`); }
+  try {
+    for (const e of blobs) {
+      const nl = out.indexOf(10, off);
+      const [sha, type, size] = out.slice(off, nl).toString("utf8").split(" ");
+      if (sha !== e.sha || type !== "blob") throw new Error("cat-file out of step");
+      const content = out.subarray(nl + 1, nl + 1 + Number(size));
+      off = nl + 1 + Number(size) + 1;
+      const abs = join(dir, e.path);
+      mkdirSync(dirname(abs), { recursive: true });
+      if (e.mode === "120000") symlinkSync(content.toString("utf8"), abs);
+      else writeFileSync(abs, content, { mode: e.mode === "100755" ? 0o755 : 0o644 });
+    }
+  } catch (err) { rmSync(dir, { recursive: true, force: true }); throw err; }
   return { dir, base };
 }
 
+/** Paths the model touched that are a symlink, a submodule, or executable in the BASE tree: the recorded mode (100644) would change them. */
+export function baseModeProblems(repo, base, paths) {
+  const bad = [];
+  for (const path of paths) {
+    const r = run(GIT, ["-C", repo, "ls-tree", base, "--", path]);
+    if (r.status !== 0) { bad.push(`${path}: git ls-tree failed`); continue; }
+    const m = r.stdout.trim().match(/^(\d+) (\w+) /);
+    if (m && m[1] !== "100644") bad.push(`${path}: is mode ${m[1]} in the base commit; only plain files (100644) can be replaced`);
+  }
+  return bad;
+}
+
 /** Attributes that would make `git add` change the bytes we checked. Returns problems (empty = the bytes survive `git add`). */
-export function attributeProblems(repo, files) {
+export function attributeProblems(repo, files, base) {
   const bad = [];
   for (const [path, content] of Object.entries(files)) {
-    const r = run(GIT, ["-C", repo, "check-attr", "filter", "ident", "working-tree-encoding", "eol", "text", "--", path]);
+    const r = run(GIT, ["-C", repo, "check-attr", `--source=${base}`, "filter", "ident", "working-tree-encoding", "eol", "text", "--", path]);
     if (r.status !== 0) { bad.push(`${path}: git check-attr failed`); continue; }
     for (const line of r.stdout.trim().split("\n").filter(Boolean)) {
       const m = line.match(/^(.*): (filter|ident|working-tree-encoding|eol|text): (.*)$/);

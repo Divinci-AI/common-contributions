@@ -14,7 +14,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmp } from "./helpers.mjs";
-import { publishProblems } from "../src/record.mjs";
+import { publishProblems, loadOrCreateKey } from "../src/record.mjs";
 
 const CLI = fileURLToPath(new URL("../src/cli.mjs", import.meta.url));
 const { CC_NODE_IMAGE: IMAGE, CC_E2E_REPO: REPO, CC_PIN: PIN } = process.env;
@@ -79,7 +79,10 @@ test("run-one in a container: a benign reply is checked in the container, record
   assert.equal(rep.tsc.ok, true, rep.tsc?.tail); assert.equal(rep.vitest.ok, true, rep.vitest?.tail);
   assert.ok(!existsSync(join(REPO, "orchestrator/src/cc-smoke.test.ts")), "--no-apply: the live checkout is not written");
   const rec = JSON.parse(readFileSync(rep.record, "utf8"));
-  assert.deepEqual(publishProblems(rec), [], "a green containerised run from a recorded commit is publishable");
+  const problems = publishProblems(rec, { key: loadOrCreateKey(join(home, "state"), { create: false }), reviewedTrees: [rec.harness.srcTreeHash] });
+  // While the harness itself has uncommitted edits the record correctly says so; everything else must be clean.
+  assert.deepEqual(problems.filter((x) => !/uncommitted changes/.test(x)), [], "a green containerised run from a recorded commit is publishable");
+  assert.equal(problems.length === 0, rec.harness.dirty === false);
   assert.equal(spawnSync(process.execPath, [CLI, "verify-record", rep.record, "--tree", out], { encoding: "utf8" }).status, 0);
 });
 

@@ -253,6 +253,7 @@ test("run-one: --allow-host-execution is the only way to verify on the host, and
   assert.equal(rep.verify.ran, true);
   assert.match(rep.verify.where, /host/);
   assert.ok(existsSync(marker), "the opt-in does run the checks");
+  assert.ok(existsSync(join(repo, "orchestrator/src/provenance.test.ts")), "host verification checks the file it just wrote, even without --apply");
 });
 
 test("mutate: refuses to run model-written code on the host without the explicit flag", async () => {

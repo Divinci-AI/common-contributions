@@ -42,12 +42,12 @@ function fixture() {
 }
 
 // ASYNC spawn: the mock server runs in THIS process, so a synchronous spawn would block the very event loop it needs.
-const cli = (args, home) =>
+const cli = (args, home, extraEnv = {}) =>
   new Promise((resolve) => {
     // HOME and XDG_STATE_HOME point at scratch too: if the override were ever ignored, the CLI would write under THIS scratch home, never the
     // real default directory (a mutation run once did exactly that, leaving a STOP file and ledger entries in a person's real state).
     const scratchHome = tmp();
-    const child = spawn(process.execPath, [CLI, ...args], { env: { ...process.env, HOME: scratchHome, XDG_STATE_HOME: join(scratchHome, "state"), COMMON_CONTRIBUTIONS_HOME: home } });
+    const child = spawn(process.execPath, [CLI, ...args], { env: { ...process.env, HOME: scratchHome, XDG_STATE_HOME: join(scratchHome, "state"), COMMON_CONTRIBUTIONS_HOME: home, ...extraEnv } });
     let stdout = "", stderr = "";
     child.stdout.on("data", (c) => (stdout += c));
     child.stderr.on("data", (c) => (stderr += c));
@@ -224,4 +224,43 @@ test("coverage command reports the importing tests and which exports they refere
   const rep = JSON.parse(r.stdout);
   assert.deepEqual(rep.referencingTests, ["orchestrator/src/source-yield.test.ts"]);
   assert.deepEqual(rep.exports.find((e) => e.name === "SOURCES").referencedIn, []);
+});
+
+// S3a: verification executes model-written code, so without a container it must not run on the host unless a person opts in.
+function fakeNpx() {
+  const bin = tmp(), marker = join(tmp(), "npx-ran");
+  writeFileSync(join(bin, "npx"), `#!/bin/sh\necho ran >> "${marker}"\nexit 0\n`, { mode: 0o755 });
+  return { env: { PATH: `${bin}:${process.env.PATH}` }, marker };
+}
+
+test("run-one: with no container runner, verification is REFUSED and nothing is executed on the host", async () => {
+  const { repo, issues } = fixture();
+  const { env, marker } = fakeNpx();
+  const r = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--host", `http://127.0.0.1:${port}`], tmp(), env);
+  const rep = report(r);
+  assert.equal(rep.verify.ran, false);
+  assert.match(rep.verify.refused, /no container runner/);
+  assert.equal(rep.tsc, undefined);
+  assert.ok(!existsSync(marker), "npx must not have been spawned");
+});
+
+test("run-one: --allow-host-execution is the only way to verify on the host, and the report says so", async () => {
+  const { repo, issues } = fixture();
+  const { env, marker } = fakeNpx();
+  const r = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--host", `http://127.0.0.1:${port}`, "--allow-host-execution"], tmp(), env);
+  const rep = report(r);
+  assert.equal(rep.verify.ran, true);
+  assert.match(rep.verify.where, /host/);
+  assert.ok(existsSync(marker), "the opt-in does run the checks");
+});
+
+test("mutate: refuses to run model-written code on the host without the explicit flag", async () => {
+  const { repo } = fixture();
+  const { env, marker } = fakeNpx();
+  const muts = join(tmp(), "m.json");
+  writeFileSync(muts, "[]");
+  const r = await cli(["mutate", "--repo", repo, "--source", "orchestrator/src/provenance.ts", "--test", "orchestrator/src/other.test.ts", "--mutations", muts, "--cwd", "orchestrator"], tmp(), env);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /no container runner/);
+  assert.ok(!existsSync(marker));
 });

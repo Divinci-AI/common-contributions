@@ -4,7 +4,7 @@
  *   node src/cli.mjs stop "reason"     trip the kill switch
  *   node src/cli.mjs clear-stop --yes  a human clears it
  *   node src/cli.mjs dry-run <issues.json>   run the loop with a STUB agent (no model, no network)
- *   node src/cli.mjs run-one <issues.json> <issueNumber> --repo <dir> --model <ollama-model> [--host URL] [--no-verify]
+ *   node src/cli.mjs run-one <issues.json> <issueNumber> --repo <dir> --model <ollama-model> [--host URL] [--no-verify | --allow-host-execution]
  *       (--reply-file F [--tokens in,out]: replay an already-written reply through the same checks; --print-prompt: show the prompt)
  *       ONE issue, a LOCAL Ollama model ($0). Writes the one allowed file into --repo's working tree and runs the
  *       project's own tsc + vitest on it. Never commits, pushes or opens a PR.
@@ -26,6 +26,10 @@ import { makeReplayAgent } from "./adapters/replay.mjs";
 import { applyFiles, runChecked } from "./verify.mjs";
 import { coverageReport, unacknowledgedTests } from "./coverage.mjs";
 import { runMutations } from "./mutate.mjs";
+
+// Until the container verifier exists, running model-written code is a host execution. It is refused unless a person says so, every time.
+const HOST_FLAG = "--allow-host-execution";
+const HOST_REFUSAL = `refusing to run model-written code on this machine: no container runner exists yet. Pass ${HOST_FLAG} to run it on the host anyway, or --no-verify to skip verification.`;
 
 const stateDir = defaultStateDir();
 const kill = new KillSwitch({ stateDir });
@@ -159,7 +163,10 @@ if (cmd === "status") {
       report.reason = "the model returned no fenced code block";
     } else {
       report.wrote = applyFiles({ root: repo, files: result.files, allowed: task.allowed });
-      if (!flags.includes("--no-verify")) {
+      if (!flags.includes("--no-verify") && !flags.includes(HOST_FLAG)) {
+        report.verify = { ran: false, refused: HOST_REFUSAL };
+      } else if (!flags.includes("--no-verify")) {
+        report.verify = { ran: true, where: "host (no container)" };
         const cwd = join(repo, "orchestrator");
         const tsc = runChecked({ cwd, command: "npx", args: ["--no-install", "tsc", "--noEmit"] });
         const vt = runChecked({ cwd, command: "npx", args: ["--no-install", "vitest", "run", task.allowed[0].replace(/^orchestrator\//, "")] });
@@ -178,6 +185,7 @@ if (cmd === "status") {
   const flag = (n) => { const i = rest.indexOf(n); return i === -1 ? undefined : rest[i + 1]; };
   const repo = flag("--repo"), source = flag("--source"), test = flag("--test"), file = flag("--mutations"), cwdRel = flag("--cwd") ?? ".";
   if (!repo || !source || !test || !file) { console.error("usage: mutate --repo <dir> --source <path> --test <path> --mutations <file.json> [--cwd <subdir>]"); process.exit(2); }
+  if (!rest.includes(HOST_FLAG)) { console.error(HOST_REFUSAL); process.exit(2); }
   const cwd = join(repo, cwdRel);
   const testInCwd = test.startsWith(cwdRel + "/") ? test.slice(cwdRel.length + 1) : test;
   const runTest = () => {

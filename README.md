@@ -26,9 +26,9 @@ node src/cli.mjs stop "reason"
 node src/cli.mjs clear-stop --yes
 node src/cli.mjs dry-run issues.json       # STUB agent: no model, no network
 node src/cli.mjs coverage --repo R --module path/to/source.ts      # who already tests this module?
-node src/cli.mjs run-one issues.json 25 --repo R --model NAME --reply-file reply.txt --tool-uses 0   # replay
+node src/cli.mjs run-one issues.json 25 --repo R --model NAME --reply-file reply.txt --tool-uses 0   # replay   # add --allow-host-execution to verify on this machine (no container yet)
 node src/cli.mjs run-one issues.json 25 --repo R --model NAME --print-prompt                         # the exact prompt
-node src/cli.mjs mutate --repo R --source S --test T --cwd DIR --mutations muts.json                 # independent mutations
+node src/cli.mjs mutate --allow-host-execution --repo R --source S --test T --cwd DIR --mutations muts.json                 # independent mutations
 ```
 State: `$COMMON_CONTRIBUTIONS_HOME` (default `~/.local/state/common-ai`, or `$XDG_STATE_HOME/common-ai`; an older `~/.divinci/common-contributions` is reused only while the new directory does not exist). Caps: `CC_MAX_USD_PER_DAY` (3), `CC_MAX_USD_TOTAL` (15).
 

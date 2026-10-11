@@ -239,7 +239,7 @@ test("run-one: with no container runner, verification is REFUSED and nothing is 
   const r = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--host", `http://127.0.0.1:${port}`], tmp(), env);
   const rep = report(r);
   assert.equal(rep.verify.ran, false);
-  assert.match(rep.verify.refused, /no container runner/);
+  assert.match(rep.verify.refused, /without a container/);
   assert.equal(rep.tsc, undefined);
   assert.ok(!existsSync(marker), "npx must not have been spawned");
 });
@@ -261,6 +261,22 @@ test("mutate: refuses to run model-written code on the host without the explicit
   writeFileSync(muts, "[]");
   const r = await cli(["mutate", "--repo", repo, "--source", "orchestrator/src/provenance.ts", "--test", "orchestrator/src/other.test.ts", "--mutations", muts, "--cwd", "orchestrator"], tmp(), env);
   assert.equal(r.status, 2);
-  assert.match(r.stderr, /no container runner/);
+  assert.match(r.stderr, /without a container/);
   assert.ok(!existsSync(marker));
+});
+
+test("run-one: --container-image never touches the host toolchain, and a failing container refuses rather than falling back", async () => {
+  const { repo, issues } = fixture();
+  const { env, marker } = fakeNpx();
+  const dbin = tmp(), argvFile = join(tmp(), "argv");
+  const docker = join(dbin, "docker");
+  writeFileSync(docker, `#!/bin/sh\necho "$@" >> "${argvFile}"\nexit 1\n`, { mode: 0o755 });
+  const r = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--host", `http://127.0.0.1:${port}`, "--container-image", "sha256:" + "a".repeat(64), "--docker", docker], tmp(), env);
+  const rep = report(r);
+  assert.equal(rep.verify.ran, false);
+  assert.match(rep.verify.refused, /docker create failed/);
+  assert.ok(!existsSync(marker), "npx must not have been spawned");
+  const argv = readFileSync(argvFile, "utf8");
+  assert.match(argv, /--network none/);
+  assert.ok(!argv.includes(repo), "the live checkout is never mounted; only a per-run copy is");
 });

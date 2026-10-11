@@ -14,7 +14,8 @@ export const USER = "65532:65532";
 export const dockerEnv = (extra = {}) => ({ PATH: "/usr/bin:/bin", ...extra });
 
 /** argv for `docker create`. Pure. `image` must be an image ID or digest (never a tag): runs never pull. */
-export function buildCreateArgs({ image, name, runId, srcDir, cmd, limits = LIMITS }) {
+export function buildCreateArgs({ image, name, runId, srcDir, cmd, limits = LIMITS, subdir = "" }) {
+  if (subdir && (!/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/.test(subdir) || subdir.split("/").includes(".."))) throw new Error("subdir must be a plain relative path");
   if (!/^(sha256:)?[a-f0-9]{12,64}$|@sha256:[a-f0-9]{64}$/.test(image)) throw new Error("image must be an image id or digest, not a tag");
   if (!isAbsolute(srcDir)) throw new Error("srcDir must be absolute");
   if (/[:,]/.test(srcDir)) throw new Error("srcDir may not contain ':' or ','");
@@ -26,7 +27,7 @@ export function buildCreateArgs({ image, name, runId, srcDir, cmd, limits = LIMI
     "--ipc", "none", "--shm-size", String(limits.shmBytes), "--init", "--log-driver", "none",
     "--tmpfs", "/tmp:rw,nosuid,size=64m", "--tmpfs", "/work/out:rw,nosuid,size=64m",
     "--mount", `type=bind,source=${srcDir},target=/work/src,readonly`,
-    "--workdir", "/work/src", "--env", "CI=1", "--env", "HOME=/tmp",
+    "--workdir", subdir ? `/work/src/${subdir}` : "/work/src", "--env", "CI=1", "--env", "HOME=/tmp",
     image, ...cmd,
   ];
 }
@@ -62,6 +63,7 @@ export function checkInspect(i, { image, srcDir, limits = LIMITS }) {
   want(tmpfs === "/tmp,/work/out", `tmpfs mounts are ${tmpfs}`);
   const mounts = i?.Mounts ?? [];
   want(mounts.length === 1 && mounts[0].Source === srcDir && mounts[0].Destination === "/work/src" && mounts[0].RW === false, "mounts are not exactly the read-only source");
+  want(c.WorkingDir === "/work/src" || /^\/work\/src\/[A-Za-z0-9._\/-]+$/.test(c.WorkingDir ?? "") && !c.WorkingDir.split("/").includes(".."), `working dir is ${c.WorkingDir}`);
   want(!mounts.some((m) => /docker\.sock/.test(m.Source ?? "")), "the docker socket is mounted");
   const env = (c.Env ?? []).filter((e) => !/^(PATH|HOSTNAME|NODE_VERSION|YARN_VERSION)=/.test(e)).sort();
   want(JSON.stringify(env) === JSON.stringify(["CI=1", "HOME=/tmp"]), `environment is ${JSON.stringify(env)}`);
@@ -82,7 +84,7 @@ export const runtimeMismatch = (actual, pin) => (pin && ["engine", "kernel", "os
  * Create, inspect, check, start, reap. Never throws for a failing command; returns {refused} when preflight fails.
  * `docker` must be an absolute path (a shim earlier on PATH cannot stand in for it).
  */
-export function runContained({ docker, image, srcDir, cmd, runId, limits = LIMITS, createArgsOverride, pin }) {
+export function runContained({ docker, image, srcDir, cmd, runId, limits = LIMITS, createArgsOverride, pin, subdir = "" }) {
   if (!isAbsolute(docker)) throw new Error("docker must be an absolute path");
   if (pin) {
     const actual = readRuntime(docker);
@@ -90,7 +92,7 @@ export function runContained({ docker, image, srcDir, cmd, runId, limits = LIMIT
     if (bad.length > 0) return { ran: false, refused: `runtime differs from the tested one (${bad.join("; ")}); the boundary was only tested on the pinned runtime`, runtime: actual };
   }
   const name = `cc-${runId}`;
-  const args = buildCreateArgs({ image, name, runId, srcDir, cmd, limits });
+  const args = buildCreateArgs({ image, name, runId, srcDir, cmd, limits, subdir });
   const created = sh(docker, createArgsOverride ? createArgsOverride(args) : args);
   if (created.status !== 0) return { ran: false, refused: `docker create failed: ${(created.stderr || "").trim().slice(0, 300)}` };
   const reap = () => { sh(docker, ["kill", name]); sh(docker, ["rm", "-fv", name]); };

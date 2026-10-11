@@ -4,7 +4,7 @@
  *   node src/cli.mjs stop "reason"     trip the kill switch
  *   node src/cli.mjs clear-stop --yes  a human clears it
  *   node src/cli.mjs dry-run <issues.json>   run the loop with a STUB agent (no model, no network)
- *   node src/cli.mjs run-one <issues.json> <issueNumber> --repo <dir> --model <ollama-model> [--host URL] [--no-verify | --allow-host-execution]
+ *   node src/cli.mjs run-one <issues.json> <issueNumber> --repo <dir> --model <ollama-model> [--host URL] [--no-verify | --container-image <id> [--docker /abs/docker] [--runtime-pin file] | --allow-host-execution]
  *       (--reply-file F [--tokens in,out]: replay an already-written reply through the same checks; --print-prompt: show the prompt)
  *       ONE issue, a LOCAL Ollama model ($0). Writes the one allowed file into --repo's working tree and runs the
  *       project's own tsc + vitest on it. Never commits, pushes or opens a PR.
@@ -26,10 +26,30 @@ import { makeReplayAgent } from "./adapters/replay.mjs";
 import { applyFiles, runChecked } from "./verify.mjs";
 import { coverageReport, unacknowledgedTests } from "./coverage.mjs";
 import { runMutations } from "./mutate.mjs";
+import { runContained, readRuntime } from "./container.mjs";
+import { buildDepImage } from "./depimage.mjs";
+import { writeFileSync as writeFile } from "node:fs";
+import { copySource } from "./sourcecopy.mjs";
+import { randomBytes } from "node:crypto";
+import { rmSync as rmTree } from "node:fs";
+import { spawnSync } from "node:child_process";
 
 // Until the container verifier exists, running model-written code is a host execution. It is refused unless a person says so, every time.
 const HOST_FLAG = "--allow-host-execution";
-const HOST_REFUSAL = `refusing to run model-written code on this machine: no container runner exists yet. Pass ${HOST_FLAG} to run it on the host anyway, or --no-verify to skip verification.`;
+const HOST_REFUSAL = `refusing to run model-written code on this machine without a container. Pass --container-image <image id> (see build-deps), or ${HOST_FLAG} to run it on the host anyway, or --no-verify to skip verification.`;
+
+const CONTAINER_FLAG = "--container-image";
+/** Run a command in the container on a per-run copy of the source. Returns {ok, tail, ...} or {refused}. */
+function containerCheck({ flagsArr, srcDir, subdir, cmd }) {
+  const at = (n) => { const i = flagsArr.indexOf(n); return i === -1 ? undefined : flagsArr[i + 1]; };
+  const image = at(CONTAINER_FLAG);
+  const docker = at("--docker") ?? spawnSync("/usr/bin/which", ["docker"], { encoding: "utf8" }).stdout.trim();
+  const pinFile = at("--runtime-pin");
+  const pin = pinFile ? JSON.parse(readFileSync(pinFile, "utf8")) : undefined;
+  const r = runContained({ docker, image, srcDir, subdir, cmd, runId: randomBytes(6).toString("hex"), pin });
+  if (!r.ran) return { ran: false, ok: false, refused: r.refused, tail: r.refused };
+  return { ran: true, ok: r.ok, timedOut: r.timedOut, tail: (r.stdout + r.stderr).split("\n").slice(-20).join("\n") };
+}
 
 const stateDir = defaultStateDir();
 const kill = new KillSwitch({ stateDir });
@@ -163,7 +183,17 @@ if (cmd === "status") {
       report.reason = "the model returned no fenced code block";
     } else {
       report.wrote = applyFiles({ root: repo, files: result.files, allowed: task.allowed });
-      if (!flags.includes("--no-verify") && !flags.includes(HOST_FLAG)) {
+      if (!flags.includes("--no-verify") && flags.includes(CONTAINER_FLAG)) {
+        const copy = copySource(repo); // after applyFiles, so the copy holds the model's file; the live checkout is not mounted
+        try {
+          const rel = task.allowed[0].replace(/^orchestrator\//, "");
+          const tsc = containerCheck({ flagsArr: flags, srcDir: copy, subdir: "orchestrator", cmd: ["/work/node_modules/.bin/tsc", "--noEmit"] });
+          const vt = containerCheck({ flagsArr: flags, srcDir: copy, subdir: "orchestrator", cmd: ["/work/node_modules/.bin/vitest", "run", "--configLoader", "runner", rel] });
+          report.verify = { ran: tsc.ran && vt.ran, where: "container (no network, read-only source)", ...(tsc.refused || vt.refused ? { refused: tsc.refused ?? vt.refused } : {}) };
+          report.tsc = { ok: tsc.ok, tail: tsc.tail };
+          report.vitest = { ok: vt.ok, tail: vt.tail };
+        } finally { rmTree(copy, { recursive: true, force: true }); }
+      } else if (!flags.includes("--no-verify") && !flags.includes(HOST_FLAG)) {
         report.verify = { ran: false, refused: HOST_REFUSAL };
       } else if (!flags.includes("--no-verify")) {
         report.verify = { ran: true, where: "host (no container)" };
@@ -176,6 +206,22 @@ if (cmd === "status") {
     }
   }
   console.warn(JSON.stringify(report, null, 2));
+} else if (cmd === "build-deps") {
+  // Stage A: the only step with network access. Prints the image id to pass as --container-image.
+  const flag = (n) => { const i = rest.indexOf(n); return i === -1 ? undefined : rest[i + 1]; };
+  const project = flag("--project"), base = flag("--base");
+  const docker = flag("--docker") ?? spawnSync("/usr/bin/which", ["docker"], { encoding: "utf8" }).stdout.trim();
+  if (!project || !base) { console.error("usage: build-deps --project <dir with package.json + package-lock.json> --base <name@sha256:digest> [--docker /abs/docker]"); process.exit(2); }
+  const r = buildDepImage({ docker, projectDir: project, baseDigest: base });
+  if (!r.ok) { console.error(r.refused); process.exit(2); }
+  console.log(r.image);
+} else if (cmd === "pin-runtime") {
+  const flag = (n) => { const i = rest.indexOf(n); return i === -1 ? undefined : rest[i + 1]; };
+  const out = flag("--out");
+  const docker = flag("--docker") ?? spawnSync("/usr/bin/which", ["docker"], { encoding: "utf8" }).stdout.trim();
+  if (!out) { console.error("usage: pin-runtime --out runtime-pin.json [--docker /abs/docker]  (run the escape tests first; the pin says which runtime they passed on)"); process.exit(2); }
+  writeFile(out, JSON.stringify(readRuntime(docker), null, 2) + "\n");
+  console.log(`wrote ${out}`);
 } else if (cmd === "coverage") {
   const flag = (n) => { const i = rest.indexOf(n); return i === -1 ? undefined : rest[i + 1]; };
   const repo = flag("--repo"), mod = flag("--module");
@@ -185,16 +231,24 @@ if (cmd === "status") {
   const flag = (n) => { const i = rest.indexOf(n); return i === -1 ? undefined : rest[i + 1]; };
   const repo = flag("--repo"), source = flag("--source"), test = flag("--test"), file = flag("--mutations"), cwdRel = flag("--cwd") ?? ".";
   if (!repo || !source || !test || !file) { console.error("usage: mutate --repo <dir> --source <path> --test <path> --mutations <file.json> [--cwd <subdir>]"); process.exit(2); }
-  if (!rest.includes(HOST_FLAG)) { console.error(HOST_REFUSAL); process.exit(2); }
-  const cwd = join(repo, cwdRel);
+  const inContainer = rest.includes(CONTAINER_FLAG);
+  if (!inContainer && !rest.includes(HOST_FLAG)) { console.error(HOST_REFUSAL); process.exit(2); }
+  const copy = inContainer ? copySource(repo) : undefined;
+  const root = copy ?? repo;
+  const cwd = join(root, cwdRel);
   const testInCwd = test.startsWith(cwdRel + "/") ? test.slice(cwdRel.length + 1) : test;
   const runTest = () => {
+    if (inContainer) {
+      const c = containerCheck({ flagsArr: rest, srcDir: copy, subdir: cwdRel === "." ? "" : cwdRel, cmd: ["/work/node_modules/.bin/vitest", "run", "--configLoader", "runner", testInCwd] });
+      return { ok: c.ok, output: c.tail ?? "" };
+    }
     const r = runChecked({ cwd, command: "npx", args: ["--no-install", "vitest", "run", testInCwd] });
     return { ok: r.ok, output: r.stdout + r.stderr };
   };
-  const out = runMutations({ root: repo, sourcePath: source, mutations: JSON.parse(readFileSync(file, "utf8")), runTest });
+  let out;
+  try { out = runMutations({ root, sourcePath: source, mutations: JSON.parse(readFileSync(file, "utf8")), runTest }); } finally { if (copy) rmTree(copy, { recursive: true, force: true }); }
   console.warn(JSON.stringify(out, null, 2));
 } else {
-  console.error("usage: status | stop [reason] | clear-stop --yes | dry-run <issues.json> | run-one ... | coverage ... | mutate ...");
+  console.error("usage: status | stop [reason] | clear-stop --yes | dry-run <issues.json> | run-one ... | build-deps ... | pin-runtime ... | coverage ... | mutate ...");
   process.exit(2);
 }

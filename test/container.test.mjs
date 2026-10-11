@@ -15,7 +15,7 @@ const good = () => ({
     PidsLimit: LIMITS.pids, Memory: LIMITS.memoryBytes, MemorySwap: LIMITS.memoryBytes, ShmSize: LIMITS.shmBytes,
     Tmpfs: { "/tmp": "rw,nosuid,size=64m", "/work/out": "rw,nosuid,size=64m" }, Init: true, LogConfig: { Type: "none" },
   },
-  Config: { User: USER, Env: ["CI=1", "HOME=/tmp", "PATH=/usr/bin"] },
+  Config: { User: USER, WorkingDir: "/work/src", Env: ["CI=1", "HOME=/tmp", "PATH=/usr/bin"] },
   Mounts: [{ Source: SRC, Destination: "/work/src", RW: false }],
 });
 const ctx = { image: IMAGE, srcDir: SRC };
@@ -24,6 +24,8 @@ test("the expected inspect output passes", () => assert.deepEqual(checkInspect(g
 
 // One mutation per setting: weaken it and the preflight must name it.
 const weaken = {
+  "working dir outside the source": (i) => (i.Config.WorkingDir = "/"),
+  "working dir escapes with ..": (i) => (i.Config.WorkingDir = "/work/src/../../etc"),
   "network": (i) => (i.HostConfig.NetworkMode = "bridge"),
   "writable root": (i) => (i.HostConfig.ReadonlyRootfs = false),
   "privileged": (i) => (i.HostConfig.Privileged = true),
@@ -142,4 +144,10 @@ test("the runtime pin: a different kernel build or engine REFUSES the run before
   const r = runContained({ docker: f.bin, image: IMAGE, srcDir: SRC, cmd: ["true"], runId: "t7", pin });
   assert.equal(r.ran, false); assert.match(r.refused, /runtime differs/);
   assert.ok(!f.calls().includes("create"), "nothing may be created on an untested runtime");
+});
+
+test("subdir sets the workdir and is validated", () => {
+  const a = buildCreateArgs({ image: IMAGE, name: "n", runId: "r", srcDir: SRC, cmd: ["true"], subdir: "orchestrator" });
+  assert.equal(a[a.indexOf("--workdir") + 1], "/work/src/orchestrator");
+  for (const bad of ["..", "a/../b", "/abs", "a b", "a;b"]) assert.throws(() => buildCreateArgs({ image: IMAGE, name: "n", runId: "r", srcDir: SRC, cmd: ["true"], subdir: bad }), /subdir/);
 });

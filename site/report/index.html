@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Dry-run report · Common AI</title>
-<meta name="description" content="What the first Common Contributions runs found: tests that failed against the real code, two real bugs, mislabeled tasks, and held-out mutation scores.">
+<meta name="description" content="What the first Common Contributions runs found: tests that failed against the real code, two real bugs, mislabeled tasks, held-out mutation scores, and how well other projects' own tests catch planted changes.">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../fonts.css">
@@ -16,14 +16,14 @@
   <header class="top">
     <a class="mark" href="../">Common AI</a>
     <nav class="nav" aria-label="Report sections">
-      <a href="#found">What it found</a><a href="#first">The first run</a><a href="#scores">Scores</a><a href="#terms">Terms</a>
+      <a href="#found">What it found</a><a href="#first">The first run</a><a href="#scores">Scores</a><a href="#others">Others' tests</a><a href="#terms">Terms</a>
     </nav>
   </header>
   <main>
     <div class="hero">
-      <span class="kicker">Dry-run report · snapshot 2026-10-06</span>
+      <span class="kicker">Dry-run report · snapshot 2026-10-06, other projects' tests added 2026-10-11</span>
       <h1 style="font-size:clamp(2.6rem,8vw,5.2rem);max-width:16ch">What the first runs showed.</h1>
-      <p class="lede">Two small modules, tested by an AI agent working text-only, checked by a harness, then attacked by mutations written by other models. Everything here was produced on our own issues in our own repository. A person approved every step that left the machine. The test files were reviewed by two other models, not yet by a maintainer.</p>
+      <p class="lede">Two small modules, tested by an AI agent working text-only, checked by a harness, then attacked by mutations written by other models. Those runs were on our own issues in our own repository, and a person approved every step that left the machine. The test files were reviewed by two other models, not yet by a maintainer. A later section runs other projects' existing tests; nothing was sent to those projects.</p>
       <p class="crumb"><a href="../">Back to the panel</a></p>
     </div>
 
@@ -70,6 +70,20 @@ state    STOP is set until a person clears it</pre>
         <div class="axis"><span></span><span class="ticks"><span>0%</span><span>25</span><span>50</span><span>75</span><span>100%</span></span><span></span></div>
       </div>
       <p class="note">Grey bars are scores on sets that had already shaped the tests. Only the dark and orange bars show whether the tests generalise. The five mutations that still get past the <code>example-chat</code> tests on the unseen set all look real. Against the bar we set, at least 80% caught and every escaping mutation caught, <code>logo-baseline</code> clears it and <code>example-chat</code> does not yet.</p>
+    </section>
+
+    <section id="others" aria-labelledby="o-h">
+      <span class="kicker">Other people's tests · added 2026-10-11</span>
+      <h2 id="o-h">Their own tests caught 78% of the changes we planted.</h2>
+      <p class="prose">We took 9 modules from 7 open-source projects, one of them ours, and ran each project's own tests in the container verifier, with no network and the source mounted read-only. Two different models, neither of which had seen the tests, each wrote 10 small changes per module meant to break it: flip a condition, swap two arguments, drop a guard. A test suite that notices has done its job.</p>
+      <ul class="finds">
+        <li><b>136 of 175 changes were caught (78%).</b> Opus caught 69 of 90 and Hermes 67 of 85. Five of the 180 written were discarded because the code they named was not unique.</li>
+        <li><b>The two models agreed where they overlapped.</b> They chose the same spot 27 times and the outcome matched all 27. Their scores per module differed by up to 20 points, and by 10 or less on 7 of the 9.</li>
+        <li><b>Some kinds of change get through more than others.</b> Negations were caught 96% of the time (46 of 48), boundaries 71% (25 of 35) and operators 59% (13 of 22).</li>
+        <li><b>Two full runs gave identical results.</b> Not one of the 180 outcomes changed, and every source file was restored byte for byte afterwards.</li>
+        <li><b>Our own compliance code had gaps.</b> On the module that checks outreach emails, each model got 8 of 10, 16 of 20 together. The four that survived show three real holes in our tests: nothing sends the unsubscribe link with a capital letter, a missing postal address is not tested, and the order of the footer is not asserted. We are writing those tests.</li>
+      </ul>
+      <p class="note">What this does not show. These are existing, human-written tests. None of our contributions was tested, and we proposed nothing to any of these projects and contacted none of them, so they are not named here. Ten changes per model per module is a small sample, and the changes were written by models, not drawn exhaustively. A few survivors are probably harmless changes that behave the same, and we did not remove them, so the true rate is somewhat higher. Line coverage ranged from 79% to 100% on the eight outside modules and did not predict the score.</p>
     </section>
 
     <section id="terms" aria-labelledby="t-h">

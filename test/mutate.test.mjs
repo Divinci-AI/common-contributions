@@ -135,3 +135,14 @@ test("a symlinked source is refused rather than replaced by a plain file", () =>
   assert.throws(() => runMutations({ root, sourcePath: "src/link.js", mutations: [{ id: "a", old: "x > 1", new: "x >= 1" }], runTest: fakeRun(root) }), /symlink/);
   assert.equal(readFileSync(join(root, "src/m.js"), "utf8"), SRC);
 });
+
+test("a planted <file>.cc-swap symlink is never written through (the temp name is random and created exclusively)", () => {
+  const root = setup();
+  const victim = join(root, "victim.txt");
+  writeFileSync(victim, "keep me");
+  symlinkSync(victim, join(root, "src/m.js.cc-swap"));
+  runMutations({ root, sourcePath: "src/m.js", mutations: [{ id: "a", old: "x > 1", new: "x >= 1" }], runTest: fakeRun(root) });
+  assert.equal(readFileSync(victim, "utf8"), "keep me");
+  assert.equal(readFileSync(join(root, "src/m.js"), "utf8"), SRC);
+  assert.deepEqual(readdirSync(join(root, "src")).filter((f) => f.includes("cc-swap-")), [], "no temp file is left behind");
+});

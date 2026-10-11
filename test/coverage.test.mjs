@@ -281,3 +281,30 @@ test("python: `from .. import name` climbs one package level and reaches the re-
   assert.deepEqual(rep.indirectTests.map((t) => t.test), ["src/attr/tests/test_rel2.py"]);
   assert.ok(rep.indirectTests[0].via.includes("src/attr/__init__.py"));
 });
+
+// ── "could not look" must never read as "no test covers it" ──
+test("a file too large to read is reported as an incomplete search, not silently skipped", async () => {
+  const { importGraphReach } = await import("../src/coverage.mjs");
+  const root = repo();
+  writeFileSync(join(root, "src/barrel.ts"), 'export * from "./prov.js";\n' + "// padding\n".repeat(200));
+  writeFileSync(join(root, "src/a.test.ts"), 'import { isSource } from "./barrel.js";\nisSource(1);\n');
+  const saved = importGraphReach.MAX_BYTES;
+  try {
+    importGraphReach.MAX_BYTES = 100;
+    const rep = coverageReport({ root, modulePath: "src/prov.ts" });
+    assert.ok(rep.incomplete.some((m) => /barrel\.ts is larger than 100 bytes/.test(m)), JSON.stringify(rep.incomplete));
+  } finally { importGraphReach.MAX_BYTES = saved; }
+  assert.deepEqual(coverageReport({ root, modulePath: "src/prov.ts" }).incomplete, []);
+});
+test("hitting the file limit of the import search is reported as an incomplete search", async () => {
+  const { importGraphReach } = await import("../src/coverage.mjs");
+  const root = repo();
+  writeFileSync(join(root, "src/a.test.ts"), 'import "./b.js";\nimport "./c.js";\nimport "./d.js";\n');
+  for (const n of ["b", "c", "d"]) writeFileSync(join(root, `src/${n}.ts`), "export const x = 1;\n");
+  const saved = importGraphReach.MAX_FILES;
+  try {
+    importGraphReach.MAX_FILES = 2;
+    const rep = coverageReport({ root, modulePath: "src/prov.ts" });
+    assert.ok(rep.incomplete.some((m) => /hit the limit of 2 files/.test(m)), JSON.stringify(rep.incomplete));
+  } finally { importGraphReach.MAX_FILES = saved; }
+});

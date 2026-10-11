@@ -24,7 +24,7 @@ import { selectRunnableTasks } from "./scope.mjs";
 import { buildMessages, makeOllamaAgent } from "./adapters/ollama.mjs";
 import { makeReplayAgent } from "./adapters/replay.mjs";
 import { applyFiles, runChecked } from "./verify.mjs";
-import { coverageReport, strongestIndirect, unacknowledgedTests } from "./coverage.mjs";
+import { coverageReport, strongestIndirect, unacknowledgedTests, TEST_FILE } from "./coverage.mjs";
 import { runMutations } from "./mutate.mjs";
 import { readRuntime, LIMITS } from "./container.mjs";
 import { buildDepImage, buildPyDepImage } from "./depimage.mjs";
@@ -117,7 +117,9 @@ if (cmd === "status") {
   if (!task) { console.error(`issue #${numberArg} is not runnable (needs the agent-ready label and a parseable one-file scope)`); process.exit(2); }
 
   // Context the model gets: the source file(s) the issue names, and one small existing test as a style example.
-  const named = [...String(task.body).matchAll(/`([^`]+\.ts)`/g)].map((m) => m[1]).filter((p) => !p.endsWith(".test.ts") && existsSync(join(repo, p)));
+  // Every language the coverage gate understands, so a Python or .js issue is checked rather than waved through.
+  const named = [...String(task.body).matchAll(/`([^`\s]+\.(?:ts|tsx|mts|js|jsx|mjs|py))`/g)].map((m) => m[1]).filter((p) => !TEST_FILE.test(basename(p)) && existsSync(join(repo, p)));
+  if (named.length === 0) { console.error("refusing: the issue names no existing source module in backticks, so the coverage gate has nothing to check"); process.exit(2); }
   const sourceFiles = Object.fromEntries(named.map((p) => [p, readFileSync(join(repo, p), "utf8").slice(0, 20000)]));
   const dir = join(repo, dirname(task.allowed[0]));
   const sibling = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".test.ts")).map((f) => join(dir, f)).filter((f) => statSync(f).size < 4000).sort()[0] : undefined;
@@ -127,10 +129,16 @@ if (cmd === "status") {
   // (An issue was once filed for a module that already had tests, because the check looked only for a sibling file.)
   const existingTests = {};
   const unacknowledged = [];
+  const incompleteSearch = [];
   for (const mod of named) {
     const rep = coverageReport({ root: repo, modulePath: mod, allowed: task.allowed });
+    for (const why of rep.incomplete ?? []) incompleteSearch.push(`${mod}: ${why}`);
     for (const f of unacknowledgedTests(rep, task.body)) unacknowledged.push(`${f} (covers ${mod})`);
     for (const f of [...rep.referencingTests, ...strongestIndirect(rep).map((t) => t.test)].slice(0, 3)) existingTests[f] = readFileSync(join(repo, f), "utf8").slice(0, 6000);
+  }
+  if (incompleteSearch.length > 0) {
+    console.error(`refusing: the search for existing tests could not be completed, so it cannot show that none exist:\n  ${incompleteSearch.join("\n  ")}`);
+    process.exit(2);
   }
   if (unacknowledged.length > 0) {
     console.error(`refusing: existing tests already cover a module this issue names (they import it, or reach it and use it), and the issue does not mention them:\n  ${unacknowledged.join("\n  ")}\nName them in the issue (and say what they do not cover), then re-run.`);

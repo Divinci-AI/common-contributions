@@ -16,7 +16,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 
 const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "coverage", "runs", "__pycache__", ".venv", "venv", ".tox", "site-packages", ".mypy_cache", ".pytest_cache"]);
-const TEST_FILE = /\.(test|spec)\.(ts|mts|cts|js|mjs|cjs|tsx)$|^(test_.*|.*_test)\.py$/;
+export const TEST_FILE = /\.(test|spec)\.(ts|mts|cts|js|mjs|cjs|tsx)$|^(test_.*|.*_test)\.py$/;
 
 /** Bounds on following imports. Exported so a test can pin them. */
 export const importGraphReach = { MAX_DEPTH: 8, MAX_FILES: 3000, MAX_BYTES: 2_000_000 };
@@ -139,7 +139,7 @@ function usedNames(text, names, lang) {
 }
 
 /**
- * @returns {{ module: string, exports: Array<{name:string, referencedIn:string[]}>, referencingTests: string[], indirectTests: Array<{test:string, names:string[], via:string[]}> }}
+ * @returns {{ module: string, exports: Array<{name:string, referencedIn:string[]}>, referencingTests: string[], indirectTests: Array<{test:string, names:string[], via:string[]}>, incomplete: string[] }}
  * `modulePath` is relative to `root`. The module's own would-be test file (`allowed`) is excluded.
  */
 export function coverageReport({ root, modulePath, allowed = [] }) {
@@ -151,8 +151,15 @@ export function coverageReport({ root, modulePath, allowed = [] }) {
   const skip = new Set(allowed.map((p) => join(root, p)));
 
   const textOf = new Map();
+  // Anything that stops the search from seeing a file or an edge is recorded: "could not look" must never read as "no test covers it".
+  const incomplete = new Set();
   const read = (f) => {
-    if (!textOf.has(f)) { try { textOf.set(f, statSync(f).size <= importGraphReach.MAX_BYTES ? readFileSync(f, "utf8") : ""); } catch { textOf.set(f, ""); } }
+    if (!textOf.has(f)) {
+      try {
+        if (statSync(f).size <= importGraphReach.MAX_BYTES) textOf.set(f, readFileSync(f, "utf8"));
+        else { incomplete.add(`${relative(root, f)} is larger than ${importGraphReach.MAX_BYTES} bytes and was not read`); textOf.set(f, ""); }
+      } catch { incomplete.add(`${relative(root, f)} could not be read`); textOf.set(f, ""); }
+    }
     return textOf.get(f);
   };
   const edgeMemo = new Map();
@@ -173,7 +180,7 @@ export function coverageReport({ root, modulePath, allowed = [] }) {
         if (parent.has(e)) continue;
         parent.set(e, f);
         if (e === target) { const chain = []; for (let c = f; c !== undefined; c = parent.get(c)) chain.unshift(c); return chain; }
-        if (++seen > importGraphReach.MAX_FILES) return undefined;
+        if (++seen > importGraphReach.MAX_FILES) { incomplete.add(`the import search from ${relative(root, start)} hit the limit of ${importGraphReach.MAX_FILES} files`); return undefined; }
         next.push(e);
       }
       frontier = next; depth++;
@@ -201,7 +208,7 @@ export function coverageReport({ root, modulePath, allowed = [] }) {
       ...indirect.filter((t) => t.names.includes(name)).map((t) => t.test),
     ],
   }));
-  return { module: modulePath, exports, referencingTests: referencing, indirectTests: indirect };
+  return { module: modulePath, exports, referencingTests: referencing, indirectTests: indirect, incomplete: [...incomplete] };
 }
 
 /**

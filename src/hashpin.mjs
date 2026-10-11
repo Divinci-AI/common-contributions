@@ -68,7 +68,7 @@ export const PIN_FLAGS = ["--rm", "-i", "--cap-drop", "ALL", "--security-opt", "
 
 /** Resolve a plain spec to a hashed requirements.txt in a throwaway container. Returns {ok, requirements} or {ok:false, refused}. */
 export function pinRequirements({ docker, baseDigest, specText }) {
-  if (!/^[a-z0-9._\/-]+@sha256:[a-f0-9]{64}$/.test(baseDigest)) return { ok: false, refused: "base image must be named by digest" };
+  if (!/^[a-z0-9][a-z0-9._\/-]*@sha256:[a-f0-9]{64}$/.test(baseDigest)) return { ok: false, refused: "base image must be named by digest" };
   const bad = checkSpec(specText);
   if (bad.length > 0) return { ok: false, refused: `spec refused: ${bad.slice(0, 5).join("; ")}${bad.length > 5 ? ` (+${bad.length - 5} more)` : ""}` };
   const script = "cat > /tmp/spec.txt && pip install --dry-run --ignore-installed --only-binary=:all: --no-cache-dir --no-input --disable-pip-version-check --quiet --report - -r /tmp/spec.txt";

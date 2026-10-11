@@ -122,3 +122,9 @@ test("garbage on stdout is a refusal, not a crash", () => {
   const r = pinRequirements({ docker: fakeDocker(dir, "not json"), baseDigest: DIGEST, specText: "attrs" });
   assert.equal(r.ok, false);
 });
+
+test("a base that starts with a dash is refused before docker is touched (it would be read as a docker option)", () => {
+  const r = pinRequirements({ docker: "/nonexistent/docker", baseDigest: "-e@sha256:" + "c".repeat(64), specText: "attrs" });
+  assert.equal(r.ok, false);
+  assert.match(r.refused, /digest/);
+});

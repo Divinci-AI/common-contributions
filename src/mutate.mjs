@@ -9,6 +9,7 @@
  * broke-build (the mutant did not even parse/compile: NOT counted as caught, it proves nothing about the test) ·
  * skipped (pattern not found exactly once).
  */
+import { randomBytes } from "node:crypto";
 import { lstatSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -37,7 +38,8 @@ export function validateMutations(list) {
  * truncated and is misreported as a build break.
  */
 function replaceFile(abs, bytes) {
-  const tmp = `${abs}.cc-swap`;
+  // The temp name is random, so a link planted at a predictable `<file>.cc-swap` can never redirect this write.
+  const tmp = `${abs}.cc-swap-${randomBytes(6).toString("hex")}`;
   writeFileSync(tmp, bytes, { mode: statSync(abs).mode & 0o7777 });
   renameSync(tmp, abs);
 }

@@ -378,3 +378,54 @@ test("legal certifications and the flagged-code acknowledgement are never comman
   for (const f of ["--cla-signed", "--certify-dco", "--allow-flagged-code"]) assert.ok(!src.includes(f), `${f} must not be an argv flag`);
   assert.match(src, /ttyAsk\(`[^`]*I certify/);
 });
+
+// ── the gate must run for every language it understands, and must not pass when it could not look ──
+function pythonIssue({ named = true } = {}) {
+  const repo = tmp();
+  mkdirSync(join(repo, "pkg"), { recursive: true });
+  mkdirSync(join(repo, "tests"), { recursive: true });
+  writeFileSync(join(repo, "pkg/mod.py"), "def helper():\n    return 1\n\ndef other():\n    return 2\n");
+  writeFileSync(join(repo, "tests/test_existing.py"), "from pkg.mod import helper\n\ndef test_it():\n    assert helper() == 1\n");
+  const body = "## What\nx\n\n## Done when (one file: `tests/test_new.py`)\n" + (named ? "- covers `pkg/mod.py`\n" : "- covers the helper module\n");
+  const issues = join(tmp(), "issues.json");
+  writeFileSync(issues, JSON.stringify([{ number: 7, title: "t", labels: [{ name: "agent-ready" }], body }]));
+  return { repo, issues };
+}
+test("coverage gate: a PYTHON issue is checked too (an existing test imports the module and the issue does not name it)", async () => {
+  const { repo, issues } = pythonIssue();
+  requests.length = 0;
+  const r = await cli(["run-one", issues, "7", "--repo", repo, "--model", "m", "--host", `http://127.0.0.1:${port}`, "--no-verify"], tmp());
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /already cover a module this issue names/);
+  assert.match(r.stderr, /tests\/test_existing\.py/);
+  assert.equal(requests.length, 0);
+});
+test("coverage gate: an issue that names no existing source module is refused, not waved through", async () => {
+  const { repo, issues } = pythonIssue({ named: false });
+  requests.length = 0;
+  const r = await cli(["run-one", issues, "7", "--repo", repo, "--model", "m", "--host", `http://127.0.0.1:${port}`, "--no-verify"], tmp());
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /names no existing source module/);
+  assert.equal(requests.length, 0);
+});
+test("coverage gate: when the search for existing tests could not be completed, run-one refuses rather than pass", async () => {
+  const { repo, issues } = fixture();
+  writeFileSync(join(repo, "orchestrator/src/big.ts"), "export const pad = 1;\n// " + "x".repeat(2_100_000) + "\n");
+  writeFileSync(join(repo, "orchestrator/src/viaBig.test.ts"), 'import "./big.js";\n');
+  requests.length = 0;
+  const r = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--host", `http://127.0.0.1:${port}`, "--no-verify"], tmp());
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /could not be completed/);
+  assert.match(r.stderr, /big\.ts is larger than/);
+  assert.equal(requests.length, 0);
+});
+test("coverage gate: an issue that names an existing TEST file in backticks does not treat it as a source module", async () => {
+  const { repo, issues } = fixture();
+  writeFileSync(join(repo, "orchestrator/src/other.test.ts"), 'import { it } from "vitest";\nit("s", () => {});\n// ONLY_IN_THAT_TEST_FILE\n' + "// padding\n".repeat(500));
+  const body = "## What\nx\nSee also `orchestrator/src/other.test.ts`.\n\n## Done when (one file: `orchestrator/src/provenance.test.ts`)\n- covers `orchestrator/src/provenance.ts`\n";
+  writeFileSync(issues, JSON.stringify([{ number: 23, title: "t", labels: [{ name: "agent-ready" }], body }]));
+  const r = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--print-prompt"], tmp());
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /export const SOURCES/);
+  assert.doesNotMatch(r.stdout, /ONLY_IN_THAT_TEST_FILE/);
+});

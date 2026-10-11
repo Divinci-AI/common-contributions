@@ -98,6 +98,10 @@ const cases = {
   "safety-critical but allowed_paths names source": [{ spec: { ...SPEC, safety_critical: true, allowed_paths: ["src/**"] }, files: { "src/a.ts": "x\n" } }, /tests and documentation only/],
   "forbidden path in a different case": [{ files: { "tests/Secret/a.test.ts": "x\n" } }, /forbids/],
   "the owner changed since the last publish here": [{ ledger: [{ repoId: 1001, ownerId: 5, userId: 21, at: Date.now() - 3 * 86400e3 }] }, /owner is unchanged/],
+  "a path with an escape character": [{ files: { ["tests/a" + String.fromCharCode(0x1b) + "[1mB.test.ts"]: "x\n" } }, /hidden characters|path/],
+  "a path that is not NFC": [{ files: { ["tests/cafe" + String.fromCharCode(0x301) + ".test.ts"]: "x\n" } }, /NFC|hidden/],
+  "a file with a NUL byte": [{ files: { "tests/a.test.ts": "x" + String.fromCharCode(0) + "y\n" } }, /not valid text|binary/],
+  "a file with replacement characters": [{ files: { "tests/a.test.ts": "x" + String.fromCharCode(0xfffd) + "y\n" } }, /not valid text/],
   "daily limit": [{ ledger: [1, 2, 3].map((i) => ({ repoId: 2000 + i, userId: 21, at: Date.now() - 3600e3 })) }, /daily limit/],
   "CLA required, not acknowledged": [{ spec: { ...SPEC, certification: { dco: "none", cla: "individual" } } }, /CLA acknowledged/],
   "DCO required, not certified": [{ spec: { ...SPEC, certification: { dco: "signed-off-by", cla: "none" } } }, /DCO certification/],
@@ -162,4 +166,9 @@ test("certifications come from a callback (the terminal), are asked once the spe
   assert.equal(seen[0].spec.certification.cla, "individual"); assert.match(seen[0].flagged[0], /reads the environment/);
   const no = asked({}); assert.equal(no.ok, false); assert.deepEqual(no.bound.ack, { cla: false, dco: false, flagged: false });
   assert.ok(no.checks.filter((c) => !c.ok).map((c) => c.name).join().match(/CLA acknowledged|DCO certification|no code that reads/));
+});
+
+test("a binary file in the record is refused, not counted as zero lines", () => {
+  const { dir, base } = localRepo();
+  assert.throws(() => diffAgainstBase(dir, base, { "tests/blob.bin": "\u0000\u0001\u0002binary" + "\u0000".repeat(50) }), /binary/);
 });

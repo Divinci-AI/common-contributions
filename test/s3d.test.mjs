@@ -206,3 +206,14 @@ test("verifier: a mismatch refuses before any container is created", () => {
   const r = runProfileChecks({ docker: fakeDocker("deadbeefdead"), image: "x", pin: {}, srcDir: src, profile: PROFILES.node, testPath: "orchestrator/src/a.test.ts" });
   assert.equal(r.ran, false); assert.match(r.refused, /does not match the project/);
 });
+
+test("a malformed record is refused, never thrown on", () => {
+  for (const bad of [{ schema: 2, files: {} }, { schema: 2, files: null, recordSha: "x" }, null, {}, { schema: 2, files: {}, recordSha: 5 }]) {
+    assert.doesNotThrow(() => verifyRecord(bad, { key: KEY })); assert.ok(verifyRecord(bad, { key: KEY }).length > 0);
+    assert.doesNotThrow(() => publishProblems(bad, OPTS)); assert.ok(publishProblems(bad, OPTS).length > 0);
+  }
+});
+test("the shipped reviewed-harness list is well formed (and EMPTY until a release records a hash: publishing refuses until then, by design)", () => {
+  const j = JSON.parse(readFileSync(new URL("../reviewed-harness-trees.json", import.meta.url), "utf8"));
+  assert.ok(Array.isArray(j.trees) && j.trees.every((t) => /^[a-f0-9]{64}$/.test(t)));
+});

@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createGh } from "../src/ghclient.mjs";
-import { dryRun, publish, ghWriter, COOLDOWN_MS, readLedger } from "../src/execute.mjs";
+import { dryRun, publish, ghWriter, COOLDOWN_MS, readLedger, certifyAfterReview } from "../src/execute.mjs";
 import { buildRecord, issueHash } from "../src/record.mjs";
 import { tmp } from "./helpers.mjs";
 import { defaultWorld, fakeRunner } from "./fakegh.mjs";
@@ -155,4 +155,19 @@ test("before the confirmations, the person's terminal is shown the contact, the 
   assert.match(shown, /acme\/widgets/); assert.match(shown, /Project contact: @maintainer/); assert.match(shown, /Alice Example <alice@example\.org>/);
   assert.match(shown, /--- diff \(1 changed lines\) ---/); assert.match(shown, /\+export \{\}/); assert.match(shown, /Certifications given: CLA no, DCO sign-off no/); assert.match(shown, /AI assistance: yes/);
   assert.equal(readLedger(s.common.ledgerFile)[0]?.ownerId, 7, "the owner at publish time is remembered");
+});
+
+test("certifications are asked AFTER the review text is shown, and a plan that fails for other reasons never asks", () => {
+  const s = scene({ spec: { ...SPEC, certification: { dco: "signed-off-by", cla: "individual" } } });
+  const order = [];
+  const { flags } = certifyAfterReview({ ...s.common, flags: undefined }, { display: (t) => { order.push("display"); assert.match(t, /--- diff/); }, askCertifications: ({ spec }) => { order.push("ask"); assert.equal(spec.certification.dco, "signed-off-by"); return { claSigned: true, certifyDco: true }; } });
+  assert.deepEqual(order, ["display", "ask"]); assert.deepEqual(flags, { claSigned: true, certifyDco: true });
+  const bad = scene({ world: (w) => (w.repo.archived = true) });
+  let asked = false;
+  const r = certifyAfterReview({ ...bad.common, flags: undefined }, { display: () => {}, askCertifications: () => { asked = true; return {}; } });
+  assert.ok(r.refused); assert.equal(asked, false);
+  // The answers then reach the real plan and the token: a "no" refuses, a "yes" changes the token.
+  const yes = dryRun({ ...s.common, flags: { claSigned: true, certifyDco: true } }), no = dryRun({ ...s.common, flags: { claSigned: false, certifyDco: true } });
+  assert.equal(yes.phase, "dry-run"); assert.equal(no.phase, "refused");
+  assert.notEqual(yes.texts.token, dryRun({ ...s.common, flags: { claSigned: true, certifyDco: true }, descriptionText: DESC + " Again." }).texts.token);
 });

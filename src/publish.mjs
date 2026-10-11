@@ -54,6 +54,7 @@ export function diffAgainstBase(repoDir, base, files) {
       const n = git(["diff", "--no-index", "--numstat", "--", a, b]);
       const m = n.stdout.trim().split("\t");
       if (!(n.status === 0 || n.status === 1) || m.length < 2) throw new Error(`diff failed for ${path}`);
+      if (m[0] === "-" || m[1] === "-") throw new Error(`${path} is a binary file; only text can be published`);
       added += Number(m[0]) || 0; deleted += Number(m[1]) || 0;
       const d = git(["diff", "--no-index", "--", a, b]).stdout.replace(new RegExp(a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), `a/${path}`).replace(new RegExp(b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), `b/${path}`);
       patches.push(d);
@@ -155,7 +156,7 @@ export function planPublish(o) {
   const diff = guard("diff against the base", () => diffAgainstBase(repoDir, record.base, files));
   if (diff) add("diff is small enough", diff.total <= Math.min(spec.max_diff_lines, TOOL_MAX_DIFF), `${diff.total} changed lines, limit ${Math.min(spec.max_diff_lines, TOOL_MAX_DIFF)}`);
   if (spec.changelog?.required) { const re = new RegExp("^" + spec.changelog.path.replace(/[.*+?^$()|[\]\\]/g, "\\$&").replace("\\{issue\\}", String(issueNumber)).replace("{issue}", String(issueNumber)).replace(/\{type\}/g, "[a-z]+") + "$"); add("changelog entry present", paths.some((p) => re.test(p)), `this project requires a changelog file like ${spec.changelog.path}`); }
-  const hidden = paths.flatMap((p) => hiddenChars(files[p]).map((c) => `${p} ${c}`));
+  const hidden = [...paths.flatMap((p) => hiddenChars(files[p]).map((c) => `${p} ${c}`)), ...paths.filter((p) => files[p].includes("\0") || files[p].includes("\ufffd")).map((p) => `${p} is not valid text`), ...paths.flatMap((p) => hiddenChars(p).map((c) => `path ${JSON.stringify(p)} ${c}`)), ...paths.filter((p) => p !== p.normalize("NFC")).map((p) => `path ${JSON.stringify(p)} is not NFC`)];
   add("no hidden characters in the files", hidden.length === 0, hidden.slice(0, 5).join(", "));
   const flagged = scanAdded(files);
   if (typeof flags === "function") flags = flags({ spec, flagged, user });

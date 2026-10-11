@@ -108,3 +108,11 @@ test("the parent is the RECORDED base even when the local HEAD has moved on", ()
   assert.match(gg("cat-file", "-p", c.sha).stdout, new RegExp(`parent ${base}\\n`));
   assert.equal(gg("show", `${c.sha}:README.md`).stdout, "hi\n", "the later local commit is not in it");
 });
+
+test("a key in the issue title, the description or the sentence never reaches a commit or a PR", () => {
+  const key = "AKIA" + "ABCDEFGHIJKLMNOP";
+  assert.throws(() => cleanTitle("Add the deploy key " + key), /secret/);
+  assert.throws(() => cleanDescription("I added a test for the empty list case, with key " + key + " in it.", 7), /secret/);
+  assert.throws(() => cleanSentence("I read issue 7 and the change adds a test; the key is " + key + " for the check.", 7), /secret/);
+  assert.ok(!/AKIA/.test(String(new Error("x").message)));
+});

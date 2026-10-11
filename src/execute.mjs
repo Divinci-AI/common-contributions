@@ -138,3 +138,16 @@ export function reviewText(first) {
     `--- PR title ---\n${texts.title}\n--- PR body ---\n${texts.body}`,
   ].join("\n");
 }
+
+/**
+ * Show the person the whole review text FIRST, then ask the certifications. The plan is first made with provisional "yes" answers purely so there is something
+ * to show; the real plan is made after, with the person's actual answers bound into the token. Returns the flags object, or {refused} when the provisional plan failed.
+ * @param o   prepare() inputs without `flags`
+ * @param io  {display(text), askCertifications({spec, flagged}) => flags}
+ */
+export function certifyAfterReview(o, io) {
+  const provisional = prepare({ ...o, flags: { claSigned: true, certifyDco: true, allowFlaggedCode: true } });
+  if (provisional.phase !== "ready") return { refused: provisional };
+  io.display(reviewText(provisional));
+  return { flags: io.askCertifications({ spec: provisional.plan.spec, flagged: provisional.plan.info.flagged }) };
+}

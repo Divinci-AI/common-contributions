@@ -10,6 +10,11 @@ import { join } from "node:path";
 import { MARKER_PREFIX } from "./publish.mjs";
 import { gitBlobId } from "./record.mjs";
 import { hiddenChars, isPlainText } from "./optin.mjs";
+import { scanForSecrets, scanAddedForEntropy } from "./secrets.mjs";
+
+/** Hostile repository text can carry a key into a commit message or PR; findings name the kind only, never the text. */
+const secretKinds = (s) => [...new Set([...scanForSecrets(s), ...scanAddedForEntropy(String(s))].map((f) => f.kind))];
+function noSecrets(s, what) { const k = secretKinds(s); if (k.length) throw new Error(`${what} looks like it contains a secret (${k.join(", ")}); it was not used`); return s; }
 
 const NOT_SAFE_TEXT = (s) => hiddenChars(s).length > 0 || /@/.test(s);
 /** Closing keywords and issue references notify or CLOSE things in other places. The tool adds its own `Refs #N`; a human's text may not add others. */
@@ -20,6 +25,7 @@ export function cleanTitle(raw) {
   const t = String(raw).replace(/\s+/g, " ").trim();
   if (!t) throw new Error("the issue title is empty");
   if (t.length > 120) throw new Error("the issue title is longer than 120 characters");
+  noSecrets(t, "the issue title");
   if (REFERENCES.test(t)) throw new Error("the issue title contains an issue reference or a closing keyword; write the title yourself with --title");
   if (NOT_SAFE_TEXT(t) || /https?:|www\.|\]\(|<|>|`/.test(t)) throw new Error("the issue title has hidden characters, a link, markup or an @ mention; write the title yourself with --title");
   return t;
@@ -29,6 +35,7 @@ export function cleanDescription(text, issueNumber) {
   if (typeof text !== "string" || text.trim().length < 20) throw new Error("the PR description must be written by you (at least 20 characters); pass --description-file");
   if (text.length > 5000) throw new Error("the PR description is longer than 5000 characters");
   if (hiddenChars(text).length > 0) throw new Error("the PR description has hidden characters");
+  noSecrets(text, "the PR description");
   if (/@/.test(text)) throw new Error("the PR description has an @ (mentions notify people; remove it)");
   if (/!\[/.test(text)) throw new Error("the PR description has an image");
   if (/<!--|<[A-Za-z\/]/.test(text)) throw new Error("the PR description has raw HTML or a comment (it could forge the marker or track readers)");
@@ -42,6 +49,7 @@ export function cleanSentence(text, issueNumber) {
   const t = String(text ?? "").replace(/\s+/g, " ").trim();
   if (t.length < 40 || t.length > 400) throw new Error("the sentence must be 40 to 400 characters, in your own words");
   if (!isPlainText(t)) throw new Error("the sentence has hidden characters, markup, a link or an @");
+  noSecrets(t, "the sentence");
   if (!new RegExp(`(^|[^0-9])${issueNumber}([^0-9]|$)`).test(t)) throw new Error(`the sentence must mention the issue number (${issueNumber}) and say what the change does`);
   return t;
 }

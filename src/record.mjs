@@ -56,7 +56,7 @@ export function buildRecord({ harness, project, origin, issue, model, base, sour
 /** Internal consistency (and, with `treeDir`, equality with the files on disk). Returns problems; empty = consistent. */
 export function verifyRecord(rec, { treeDir, key } = {}) {
   const p = [];
-  if (!rec || rec.schema !== 2 || typeof rec.files !== "object") return ["not a run record"];
+  if (!rec || rec.schema !== 2 || typeof rec.files !== "object" || rec.files === null || typeof rec.recordSha !== "string") return ["not a run record"];
   const { recordSha, mac: m, ...body } = rec;
   if (sha256(canonical(body)) !== recordSha) p.push("record was edited after it was written (recordSha differs)");
   if (key) {

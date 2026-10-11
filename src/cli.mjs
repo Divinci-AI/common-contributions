@@ -37,7 +37,7 @@ import { loadPin, qualifyRuntime, parseTap } from "./pin.mjs";
 import { cleanup } from "./hygiene.mjs";
 import { parseOptIn } from "./optin.mjs";
 import { createGh, ghRunner } from "./ghclient.mjs";
-import { dryRun, publish, ghWriter, readLedger, reviewText } from "./execute.mjs";
+import { dryRun, publish, ghWriter, readLedger, certifyAfterReview } from "./execute.mjs";
 import { DCO_TEXT, DCO_WARNING, CLA_WARNING } from "./legal.mjs";
 import { openSync as fsOpen, writeSync as fsWrite, closeSync as fsClose } from "node:fs";
 import { ttyAsk, escapeForTerminal } from "./tty.mjs";
@@ -305,15 +305,16 @@ if (cmd === "status") {
     const reviewedTrees = JSON.parse(readFileSync(join(harnessDir, "reviewed-harness-trees.json"), "utf8")).trees;
     const sentence = ttyAsk(`Your own words, one sentence ("I read every line and can answer review without the model", and what the change does; mention issue ${issueNumber}):\n> `);
     const ledgerFile = join(stateDir, "published.jsonl");
-    // Certifications are given ON THE TERMINAL, once per run, after the text is shown. They are never flags.
+    // Certifications are given ON THE TERMINAL, once per run, AFTER the review text is shown. They are never flags.
     const memo = {};
-    const certify = ({ spec, flagged }) => {
+    const askCertifications = ({ spec, flagged }) => {
       const out = {};
-      if (spec.certification.cla !== "none") { memo.cla ??= (ttyAsk(`\nThis project requires a ${spec.certification.cla} CLA.\n${CLA_WARNING}\nType "I have signed" to confirm: `) === "I have signed"); out.claSigned = memo.cla; }
-      if (spec.certification.dco === "signed-off-by") { memo.dco ??= (ttyAsk(`\n${DCO_TEXT}\n\n${DCO_WARNING}\nType "I certify" to add Signed-off-by: ${user.name} <${user.email}>: `) === "I certify"); out.certifyDco = memo.dco; }
-      if (flagged.length > 0) { memo.fl ??= (ttyAsk(`\nThese added lines touch the environment, network or processes:\n  ${escapeForTerminal(flagged.slice(0, 30).join("\n  "))}\nType "I read them" to continue: `) === "I read them"); out.allowFlaggedCode = memo.fl; }
+      if (spec.certification.cla !== "none") { out.claSigned = ttyAsk(`\nThis project requires a ${spec.certification.cla} CLA.\n${CLA_WARNING}\nType "I have signed" to confirm: `) === "I have signed"; }
+      if (spec.certification.dco === "signed-off-by") { out.certifyDco = ttyAsk(`\n${DCO_TEXT}\n\n${DCO_WARNING}\nType "I certify" to add Signed-off-by: ${user.name} <${user.email}>: `) === "I certify"; }
+      if (flagged.length > 0) { out.allowFlaggedCode = ttyAsk(`\nThese added lines touch the environment, network or processes (listed above):\n  ${escapeForTerminal(flagged.slice(0, 30).join("\n  "))}\nType "I read them" to continue: `) === "I read them"; }
       return out;
     };
+    const certify = () => memo.flags ?? {};
     const o = {
       gh, write: ghWriter(runner), record: JSON.parse(readFileSync(recordFile, "utf8")), key, reviewedTrees, target, issueNumber, user, repoDir: clone,
       ledger: readLedger(ledgerFile), flags: certify,
@@ -325,6 +326,9 @@ if (cmd === "status") {
       for (const c of r.plan.checks) console.log(`${c.ok ? "ok  " : "FAIL"} ${c.name}${c.ok ? "" : ": " + escapeForTerminal(c.detail)}`);
       for (const w of r.plan.warnings ?? []) console.log(`warn ${escapeForTerminal(w)}`);
     };
+    const reviewed = certifyAfterReview({ ...o, flags: undefined }, { display: (t) => o.display(t), askCertifications });
+    if (reviewed.refused) { show(reviewed.refused); console.error("\nrefused: nothing was changed."); process.exit(2); }
+    memo.flags = reviewed.flags;
     if (!o.approve) {
       const r = dryRun(o);
       show(r);

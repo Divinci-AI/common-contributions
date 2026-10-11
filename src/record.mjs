@@ -43,10 +43,10 @@ export function harnessIdentity(harnessDir) {
 
 export const issueHash = (title, body) => sha256(`${title}\n${body}`);
 
-export function buildRecord({ harness, project, origin, issue, base, source, container, runtime, pin, image, dep, limits, files, checks, ledger, profile, key }) {
+export function buildRecord({ harness, project, origin, issue, model, base, source, container, runtime, pin, image, dep, limits, files, checks, ledger, profile, key }) {
   const body = {
     schema: 2, selfReported: true, createdAt: new Date().toISOString(),
-    harness, project, origin, issue, base, source, container, runtime, pin, image, dep, limits, profile,
+    harness, project, origin, issue, model, base, source, container, runtime, pin, image, dep, limits, profile,
     files: fileEntries(files), checks, ledger,
   };
   const recordSha = sha256(canonical(body));

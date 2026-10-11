@@ -222,7 +222,7 @@ if (cmd === "status") {
           for (const c of v.checks ?? []) report[c.name] = { ok: c.ok, tail: c.tail };
           const harnessDir = fileURLToPath(new URL("..", import.meta.url));
           const rec = buildRecord({
-            harness: harnessIdentity(harnessDir), project: { dir: basename(repo) }, origin: originOf(repo), issue: { number: task.number, sha256: issueHash(task.title, task.body) }, key: loadOrCreateKey(stateDir), base, source, container: v.ran === true,
+            harness: harnessIdentity(harnessDir), project: { dir: basename(repo) }, origin: originOf(repo), issue: { number: task.number, sha256: issueHash(task.title, task.body) }, model, key: loadOrCreateKey(stateDir), base, source, container: v.ran === true,
             runtime: v.runtime, pin, image, dep: v.dep, limits: LIMITS, profile: profile.language, files: result.files,
             checks: (v.checks ?? []).map((c) => ({ name: c.name, argv: c.argv, status: c.status, timedOut: c.timedOut, tail: c.tail })), ledger: report.ledger,
           });

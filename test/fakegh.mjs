@@ -35,7 +35,7 @@ export function fakeRunner(world) {
     if (path.startsWith(`/repositories/${r.id}/contents/`)) {
       if (!world.optin) return err(404);
       const f = world.optin; const content = Buffer.from(f.content).toString("base64");
-      return ok({ type: f.type ?? "file", size: f.size ?? Buffer.byteLength(f.content), sha: f.sha ?? "d".repeat(40), encoding: "base64", content });
+      return ok({ type: f.type ?? "file", size: f.size ?? Buffer.byteLength(f.content), sha: f.sha ?? "d".repeat(40), encoding: f.encoding ?? "base64", content });
     }
     if (path.startsWith(`/repositories/${r.id}/commits?`)) return ok([{ sha: world.optinCommit.sha, commit: { committer: { date: world.optinCommit.date } }, author: { login: world.optinCommit.authorLogin, type: world.optinCommit.authorType } }]);
     if (path.startsWith("/users/")) { const u = world.users[decodeURIComponent(path.slice(7))]; return u ? ok(u) : err(404); }

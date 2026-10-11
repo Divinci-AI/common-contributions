@@ -36,7 +36,7 @@ test("branchHead and compare", () => {
 test("file: only a small base64 regular file is returned; absent is an error", () => {
   const ok = setup((w) => (w.optin = { content: '{"a":1}' })).gh.file(1001, ".github/agent-contributions.json", "x");
   assert.equal(ok.bytes.toString(), '{"a":1}'); assert.match(ok.blobSha, /^d+$/);
-  for (const [name, optin, re] of [["symlink", { content: "x", type: "symlink" }, /symlink/], ["submodule", { content: "x", type: "submodule" }, /submodule/], ["too big", { content: "x", size: 20000 }, /too large/]]) {
+  for (const [name, optin, re] of [["symlink", { content: "x", type: "symlink" }, /symlink/], ["submodule", { content: "x", type: "submodule" }, /submodule/], ["too big", { content: "x", size: 20000 }, /too large/], ["not base64", { content: "x", encoding: "none" }, /encoding/]]) {
     assert.throws(() => setup((w) => (w.optin = optin)).gh.file(1001, "p", "x"), re, name);
   }
   assert.throws(() => setup().gh.file(1001, "p", "x"), (e) => e instanceof GhError && e.httpStatus === 404);
@@ -77,4 +77,10 @@ test("the real runner needs an absolute gh path and reduces the environment", ()
   assert.equal(out.status, 0);
   const names = out.stdout.split("\n").map((l) => l.split("=")[0]).filter(Boolean);
   assert.ok(names.every((n) => ["PATH", "HOME", "GH_PROMPT_DISABLED", "GH_NO_UPDATE_NOTIFIER", "PWD", "SHLVL", "_", "OLDPWD"].includes(n)), names.join());
+});
+
+test("a list endpoint that answers with an object is an error, not an empty list", () => {
+  const gh = createGh(() => ({ status: 0, stdout: JSON.stringify({ message: "rate limited" }), stderr: "" }));
+  assert.throws(() => gh.issueEvents(1, 2), /expected a list/);
+  assert.throws(() => gh.openPulls(1), /expected a list/);
 });

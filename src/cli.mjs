@@ -37,7 +37,9 @@ import { loadPin, qualifyRuntime, parseTap } from "./pin.mjs";
 import { cleanup } from "./hygiene.mjs";
 import { parseOptIn } from "./optin.mjs";
 import { createGh, ghRunner } from "./ghclient.mjs";
-import { dryRun, publish, ghWriter, readLedger } from "./execute.mjs";
+import { dryRun, publish, ghWriter, readLedger, reviewText } from "./execute.mjs";
+import { DCO_TEXT, DCO_WARNING, CLA_WARNING } from "./legal.mjs";
+import { openSync as fsOpen, writeSync as fsWrite, closeSync as fsClose } from "node:fs";
 import { ttyAsk, escapeForTerminal } from "./tty.mjs";
 import { fileURLToPath } from "node:url";
 import { mkdirSync } from "node:fs";
@@ -286,7 +288,7 @@ if (cmd === "status") {
 } else if (cmd === "publish") {
   // Dry run unless --approve <token>. Reads GitHub through YOUR gh; confirmations come from /dev/tty.
   const flag = (n) => { const i = rest.indexOf(n); return i === -1 ? undefined : rest[i + 1]; };
-  const need = (n) => { const v = flag(n); if (!v) { console.error(`usage: publish --record <run-record.json> --repo owner/name --issue N --clone <dir> --description-file <file> [--approve <token>] [--title T] [--gh /abs/gh] [--cla-signed] [--certify-dco] [--allow-flagged-code]`); process.exit(2); } return v; };
+  const need = (n) => { const v = flag(n); if (!v) { console.error(`usage: publish --record <run-record.json> --repo owner/name --issue N --clone <dir> --description-file <file> [--approve <token>] [--title T] [--gh /abs/gh]`); process.exit(2); } return v; };
   const recordFile = need("--record"), target = need("--repo"), issueNumber = Number(need("--issue")), clone = need("--clone"), descFile = need("--description-file");
   const harnessDir = fileURLToPath(new URL("..", import.meta.url));
   const ghPath = flag("--gh") ?? spawnSync("/usr/bin/which", ["gh"], { encoding: "utf8" }).stdout.trim();
@@ -303,11 +305,21 @@ if (cmd === "status") {
     const reviewedTrees = JSON.parse(readFileSync(join(harnessDir, "reviewed-harness-trees.json"), "utf8")).trees;
     const sentence = ttyAsk(`Your own words, one sentence ("I read every line and can answer review without the model", and what the change does; mention issue ${issueNumber}):\n> `);
     const ledgerFile = join(stateDir, "published.jsonl");
+    // Certifications are given ON THE TERMINAL, once per run, after the text is shown. They are never flags.
+    const memo = {};
+    const certify = ({ spec, flagged }) => {
+      const out = {};
+      if (spec.certification.cla !== "none") { memo.cla ??= (ttyAsk(`\nThis project requires a ${spec.certification.cla} CLA.\n${CLA_WARNING}\nType "I have signed" to confirm: `) === "I have signed"); out.claSigned = memo.cla; }
+      if (spec.certification.dco === "signed-off-by") { memo.dco ??= (ttyAsk(`\n${DCO_TEXT}\n\n${DCO_WARNING}\nType "I certify" to add Signed-off-by: ${user.name} <${user.email}>: `) === "I certify"); out.certifyDco = memo.dco; }
+      if (flagged.length > 0) { memo.fl ??= (ttyAsk(`\nThese added lines touch the environment, network or processes:\n  ${escapeForTerminal(flagged.slice(0, 30).join("\n  "))}\nType "I read them" to continue: `) === "I read them"); out.allowFlaggedCode = memo.fl; }
+      return out;
+    };
     const o = {
       gh, write: ghWriter(runner), record: JSON.parse(readFileSync(recordFile, "utf8")), key, reviewedTrees, target, issueNumber, user, repoDir: clone,
-      ledger: readLedger(ledgerFile), flags: { claSigned: rest.includes("--cla-signed"), certifyDco: rest.includes("--certify-dco"), allowFlaggedCode: rest.includes("--allow-flagged-code") },
+      ledger: readLedger(ledgerFile), flags: certify,
       descriptionText: readFileSync(descFile, "utf8"), sentence, titleOverride: flag("--title"), pendingDir: join(stateDir, "publish-pending"), ledgerFile,
       pushUrlFor: (fork) => `https://github.com/${fork}.git`, ask: ttyAsk, approve: flag("--approve"),
+      display: (text) => { const fd = fsOpen("/dev/tty", "w"); try { fsWrite(fd, `\n${escapeForTerminal(text)}\n\n`); } finally { fsClose(fd); } },
     };
     const show = (r) => {
       for (const c of r.plan.checks) console.log(`${c.ok ? "ok  " : "FAIL"} ${c.name}${c.ok ? "" : ": " + escapeForTerminal(c.detail)}`);
@@ -317,7 +329,7 @@ if (cmd === "status") {
       const r = dryRun(o);
       show(r);
       if (r.phase !== "dry-run") { console.error("\nrefused: nothing was changed."); process.exit(2); }
-      console.log(`\n--- diff (${r.plan.diff.total} changed lines) ---\n${escapeForTerminal(r.plan.diff.patch)}\n--- commit message ---\n${escapeForTerminal(r.texts.message)}\n--- PR title ---\n${escapeForTerminal(r.texts.title)}\n--- PR body ---\n${escapeForTerminal(r.texts.body)}\n--- author published in the commit: ${escapeForTerminal(user.name)} <${escapeForTerminal(user.email)}> ---`);
+      console.log(`\nproject contact: ${escapeForTerminal(r.plan.info.contact)}   policy: ${escapeForTerminal(r.plan.info.policyUrl)}${r.plan.info.safetyCritical ? `\nSAFETY-CRITICAL: ${escapeForTerminal(r.plan.info.safetyReason ?? "")} (tests and documentation only)` : ""}\n--- diff (${r.plan.diff.total} changed lines) ---\n${escapeForTerminal(r.plan.diff.patch)}\n--- commit message ---\n${escapeForTerminal(r.texts.message)}\n--- PR title ---\n${escapeForTerminal(r.texts.title)}\n--- PR body ---\n${escapeForTerminal(r.texts.body)}\n--- author published in the commit: ${escapeForTerminal(user.name)} <${escapeForTerminal(user.email)}> ---`);
       console.log(`\nDRY RUN ONLY: nothing was changed on GitHub.\nTo publish, wait at least 10 minutes, re-read the above, then run the same command with:\n  --approve ${r.texts.token}\nYou will be asked on the terminal to retype the repository name and to confirm.`);
     } else {
       const r = await publish(o);

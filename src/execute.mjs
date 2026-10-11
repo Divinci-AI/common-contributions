@@ -78,6 +78,7 @@ export async function publish(o) {
   const age = now - statSync(pend).mtimeMs, recorded = now - JSON.parse(readFileSync(pend, "utf8")).at;
   if (Math.min(age, recorded) < COOLDOWN_MS) return refuse(first, `wait ${Math.ceil((COOLDOWN_MS - Math.min(age, recorded)) / 60000)} more minute(s) after the dry run and read the diff again`);
 
+  o.display?.(reviewText(first));
   const typed = (ask(`Type the repository name (${plan.bound.fullName}) to confirm: `) ?? "").trim();
   if (typed !== plan.bound.fullName) return refuse(first, "the repository name was not typed correctly");
   const again = (ask(`Your sentence, retype it exactly (or press Enter to confirm it as printed):\n  "${texts.sentence}"\n> `) ?? "").trim();
@@ -113,7 +114,7 @@ export async function publish(o) {
       throw new RecheckError(`the pull request that was created ${problems.join(", ")}; it was closed. Nothing else was done.`);
     }
     mkdirSync(dirname(ledgerFile), { recursive: true });
-    appendFileSync(ledgerFile, JSON.stringify({ repoId: plan.bound.repoId, userId: user.id, at: now, pr: pr.html_url ?? pr.url, number: pr.number, issue: o.issueNumber, branch: texts.branch, commitSha: texts.commitSha }) + "\n");
+    appendFileSync(ledgerFile, JSON.stringify({ repoId: plan.bound.repoId, ownerId: plan.bound.ownerId, userId: user.id, at: now, pr: pr.html_url ?? pr.url, number: pr.number, issue: o.issueNumber, branch: texts.branch, commitSha: texts.commitSha }) + "\n");
     log.push(`opened ${pr.html_url ?? pr.url}`);
     return { phase: "published", plan, texts, pr, log };
   } catch (e) {
@@ -122,3 +123,18 @@ export async function publish(o) {
 }
 class RecheckError extends Error {}
 const refuse = (first, reason) => ({ phase: "refused", plan: { ...first.plan, ok: false, checks: [...first.plan.checks, { name: "approval", ok: false, detail: reason }] }, texts: first.texts });
+
+/** Everything the person should see on THEIR terminal immediately before confirming (not only in the dry run's output). */
+export function reviewText(first) {
+  const { plan, texts } = first, i = plan.info ?? {};
+  return [
+    `Repository: ${plan.bound.fullName}   issue #${plan.bound.issueNumber}   base ${plan.bound.base.slice(0, 12)}   commit ${texts.commitSha.slice(0, 12)}`,
+    `Project contact: ${i.contact ?? "?"}   policy: ${i.policyUrl ?? "?"}${i.safetyCritical ? `\nSAFETY-CRITICAL project${i.safetyReason ? `: ${i.safetyReason}` : ""}: tests and documentation only` : ""}`,
+    `Published under your name: ${plan.bound.user.name} <${plan.bound.user.email}>`,
+    `Certifications given: CLA ${plan.bound.ack?.cla ? "yes" : "no"}, DCO sign-off ${plan.bound.ack?.dco ? "yes" : "no"}, flagged code reviewed ${plan.bound.ack?.flagged ? "yes" : "no"}`,
+    (i.flagged?.length ?? 0) > 0 ? `Lines that touch the environment, network or processes:\n  ${i.flagged.join("\n  ")}` : "No lines touch the environment, network or processes.",
+    `--- diff (${plan.diff.total} changed lines) ---\n${plan.diff.patch}`,
+    `--- commit message ---\n${texts.message}`,
+    `--- PR title ---\n${texts.title}\n--- PR body ---\n${texts.body}`,
+  ].join("\n");
+}

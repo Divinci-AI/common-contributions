@@ -70,7 +70,7 @@ export function createGh(run) {
     /** `ahead` or `identical`: the base is an ancestor of the head. Anything else is not. */
     compare(id, base, head) {
       const r = need(get(`/repositories/${id}/compare/${base}...${head}`), { status: "s" }, "compare");
-      return { status: r.status, files: Array.isArray(r.files) ? r.files.map((f) => f.filename) : null, truncatedFiles: (r.files?.length ?? 0) >= 300 };
+      return { status: r.status, files: Array.isArray(r.files) ? r.files.flatMap((f) => [f.filename, ...(f.previous_filename ? [f.previous_filename] : [])]) : null, truncatedFiles: (r.files?.length ?? 0) >= 300 };
     },
     /** The opt-in file at a ref: bytes and blob sha, or throws. */
     file(id, path, ref) {
@@ -99,12 +99,12 @@ export function createGh(run) {
     issueEvents(id, n) {
       const { items, truncated } = pages(`/repositories/${id}/issues/${n}/events`, { maxPages: 5 });
       if (truncated) throw new GhError("too many issue events to read; refusing");
-      return items.map((e) => ({ event: e.event, label: e.label?.name ?? null, actorId: e.actor?.id ?? null, actorType: e.actor?.type ?? null, actorLogin: e.actor?.login ?? null, createdAt: e.created_at }));
+      return items.map((e) => ({ event: e.event, rename: e.rename ?? null, label: e.label?.name ?? null, actorId: e.actor?.id ?? null, actorType: e.actor?.type ?? null, actorLogin: e.actor?.login ?? null, createdAt: e.created_at }));
     },
     /** GraphQL: when the issue's title or body was last edited by anyone (null if never). */
     issueLastEdit(owner, name, n) {
       const q = "query($o:String!,$n:String!,$i:Int!){repository(owner:$o,name:$n){issue(number:$i){lastEditedAt}}}";
-      const r = run(["api", "graphql", "-f", `query=${q}`, "-F", `o=${owner}`, "-F", `n=${name}`, "-F", `i=${n}`]);
+      const r = run(["api", "graphql", "-f", `query=${q}`, "-f", `o=${owner}`, "-f", `n=${name}`, "-F", `i=${n}`]);
       if (r.status !== 0) throw new GhError("GitHub GraphQL request failed");
       let j; try { j = JSON.parse(r.stdout); } catch { throw new GhError("GraphQL answer is not JSON"); }
       const issue = j?.data?.repository?.issue;

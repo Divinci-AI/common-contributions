@@ -84,3 +84,14 @@ test("a list endpoint that answers with an object is an error, not an empty list
   assert.throws(() => gh.issueEvents(1, 2), /expected a list/);
   assert.throws(() => gh.openPulls(1), /expected a list/);
 });
+
+test("GraphQL strings are sent raw (-f) so a repository named 2048 or true is not turned into a number or a boolean; the issue number is typed (-F)", () => {
+  let seen; const gh = createGh((args) => { seen = args; return { status: 0, stdout: JSON.stringify({ data: { repository: { issue: { lastEditedAt: null } } } }), stderr: "" }; });
+  gh.issueLastEdit("2048", "true", 7);
+  const pairs = seen.map((a, i) => (a === "-f" || a === "-F" ? `${a} ${seen[i + 1]}` : null)).filter(Boolean);
+  assert.deepEqual(pairs.filter((x) => !x.includes("query=")), ["-f o=2048", "-f n=true", "-F i=7"]);
+});
+test("compare reports a renamed file's previous name too, so an upstream rename of a recorded path is noticed", () => {
+  const gh = createGh(() => ({ status: 0, stdout: JSON.stringify({ status: "ahead", files: [{ filename: "new/a.ts", previous_filename: "tests/new.test.ts" }] }), stderr: "" }));
+  assert.deepEqual(gh.compare(1, "a".repeat(40), "b".repeat(40)).files, ["new/a.ts", "tests/new.test.ts"]);
+});

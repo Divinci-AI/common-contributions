@@ -28,7 +28,7 @@ export function isSafeRelativePath(p) {
  * Files that change what runs (dependencies, install scripts, test and compiler config). A task may never touch them: the
  * dependency image is built from these, so letting a contribution edit them would make the image and the code diverge.
  */
-const CONFIG_FILE = /(^|\/)(package\.json|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|\.npmrc|\.yarnrc(\.yml)?|requirements[^/]*\.txt|pyproject\.toml|setup\.py|setup\.cfg|conftest\.py|pytest\.ini|tox\.ini|vitest\.config\.[^/]+|vitest\.workspace\.[^/]+|jest\.config\.[^/]+|tsconfig[^/]*\.json)$/;
+const CONFIG_FILE = /(^|\/)(package\.json|package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|\.npmrc|\.yarnrc(\.yml)?|requirements[^/]*\.txt|pyproject\.toml|setup\.py|setup\.cfg|conftest\.py|pytest\.ini|tox\.ini|vitest\.config\.[^/]+|vitest\.workspace\.[^/]+|jest\.config\.[^/]+|tsconfig[^/]*\.json|Makefile|GNUmakefile|CMakeLists\.txt|Cargo\.(toml|lock)|go\.(mod|sum)|Gemfile(\.lock)?|pom\.xml|build\.gradle(\.kts)?|settings\.gradle(\.kts)?|noxfile\.py|\.pre-commit-config\.yaml|Dockerfile[^/]*|docker-compose[^/]*\.ya?ml|[^/]*\.config\.[cm]?[jt]s|\.eslintrc[^/]*|\.babelrc[^/]*|babel\.config\.[^/]+|webpack\.[^/]+|rollup\.[^/]+|\.gitlab-ci\.yml|Jenkinsfile|composer\.(json|lock)|mix\.exs|build\.sbt|meson\.build|meson_options\.txt|SConstruct|\.python-version|\.nvmrc|\.tool-versions)$/;
 export const isConfigFile = (p) => CONFIG_FILE.test(String(p));
 
 /** Files changed outside the allowed set, or empty list when the diff stays in scope. */

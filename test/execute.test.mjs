@@ -147,3 +147,12 @@ for (const [name, mod, re] of [
     assert.equal(r.phase, "aborted"); assert.match(r.error, re); assert.equal(readLedger(s.common.ledgerFile).length, 0);
   });
 }
+
+test("before the confirmations, the person's terminal is shown the contact, the author, the certifications and the whole diff", async () => {
+  const s = scene(); const d = dryRun(s.common); let shown = "", order = [];
+  const r = await publish({ ...s.common, approve: d.texts.token, now: s.common.now + COOLDOWN_MS + 1000, display: (t) => { shown = t; order.push("display"); }, ask: (() => { const g = GOOD(); return (q) => { order.push("ask"); return g(q); }; })() });
+  assert.equal(order[0], "display", "shown before the first question");
+  assert.match(shown, /acme\/widgets/); assert.match(shown, /Project contact: @maintainer/); assert.match(shown, /Alice Example <alice@example\.org>/);
+  assert.match(shown, /--- diff \(1 changed lines\) ---/); assert.match(shown, /\+export \{\}/); assert.match(shown, /Certifications given: CLA no, DCO sign-off no/); assert.match(shown, /AI assistance: yes/);
+  assert.equal(readLedger(s.common.ledgerFile)[0]?.ownerId, 7, "the owner at publish time is remembered");
+});

@@ -12,11 +12,14 @@ You are the submitter. The pull request comes from **your** fork and **your** ac
 The PR description (`--description-file`) and one sentence in your own words that says what the change does and mentions the issue number. The tool adds only the project's required disclosure, the issue reference, your sentence and a short note that the checks ran in a container (self-reported).
 
 ## Flags you have to mean
-`--cla-signed` (you have signed the project's CLA; a CLA can bind your employer). `--certify-dco` (you can certify the Developer Certificate of Origin for this change; the tool never signs for you, and the origin of model output is unknown). `--allow-flagged-code` (you read the lines that touch the environment, network or processes).
+Three things are asked ON THE TERMINAL, never as flags, after the text is shown: that you have signed a required CLA (it can bind your employer); that you certify the Developer Certificate of Origin for this change (the tool never signs for you, and the origin of model output is unknown); and that you read any added lines that touch the environment, network or processes.
+
+## What the confirmation is and is not
+The confirmations are read from your terminal (`/dev/tty`), not from flags or a pipe, and the diff, the lines that touch the environment or network, your published name and email, and the project's contact are printed there first. That deters a hurried human and a program that only has a pipe. It does **not** stop a program running as you that opens its own pseudo-terminal, or that calls the GitHub API with your login. Do not run this where something else has your terminal.
 
 ## Things to know
 - Every pull request notifies the project's watchers and code owners.
-- GitHub's Acceptable Use Policy prohibits bulk and inauthentic automated activity. This tool opens at most one pull request per project per 24 hours and at most three a day, only after you confirm each one, and never retries a failed write. Read the policy and keep it that way.
+- GitHub's Acceptable Use Policy prohibits bulk and inauthentic automated activity. This tool refuses a second pull request to the same project within 24 hours and more than three in a day, but it counts those from a ledger on your machine, which you control; the checks it makes on GitHub itself are the project's open agent PR count, your own open agent PR, and an earlier PR waiting on you. It opens one only after you confirm, and never retries a failed write. Read the policy and keep to it.
 - Your git `user.name` and `user.email` are published in the commit.
 - If a project answers with changes requested and you do not reply for a week, the tool refuses to open more. Answer or close.
 - The tool refuses until the harness source you are running is a reviewed one (`reviewed-harness-trees.json`). That is a consistency check against edited copies, not security.

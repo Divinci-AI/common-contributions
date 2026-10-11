@@ -372,3 +372,9 @@ test("run-one --task-label: a project's own label selects the task; the default 
   const yes = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--print-prompt", "--task-label", "help wanted (ai ok)"], tmp());
   assert.equal(yes.status, 0, yes.stderr);
 });
+
+test("legal certifications and the flagged-code acknowledgement are never command-line flags", () => {
+  const src = readFileSync(CLI, "utf8");
+  for (const f of ["--cla-signed", "--certify-dco", "--allow-flagged-code"]) assert.ok(!src.includes(f), `${f} must not be an argv flag`);
+  assert.match(src, /ttyAsk\(`[^`]*I certify/);
+});

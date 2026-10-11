@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createGh } from "../src/ghclient.mjs";
-import { planPublish, scanAdded, diffAgainstBase, MARKER_PREFIX } from "../src/publish.mjs";
+import { planPublish, scanAdded, diffAgainstBase, isTestOrDocPath, MARKER_PREFIX } from "../src/publish.mjs";
 import { buildRecord, issueHash } from "../src/record.mjs";
 import { tmp } from "./helpers.mjs";
 import { defaultWorld, fakeRunner } from "./fakegh.mjs";
@@ -94,6 +94,10 @@ const cases = {
   "pulls cannot be counted": [{ world: (w) => (w.pulls = Array.from({ length: 501 }, (_, i) => ({ number: i, head: { ref: "x" }, user: {}, body: "" }))) }, /could be counted/],
   "published here in the last 24h": [{ ledger: [{ repoId: 1001, userId: 21, at: Date.now() - 3600e3 }] }, /last 24 hours/],
   "an earlier PR has had changes requested for over a week with no reply": [{ ledger: [{ repoId: 3000, userId: 21, at: Date.now() - 20 * 86400e3, number: 9 }], world: (w) => (w.earlier = { "3000/9": { pr: { state: "open", updated_at: "2026-09-20T00:00:00Z" }, reviews: [{ state: "CHANGES_REQUESTED", submitted_at: "2026-09-20T00:00:00Z", user: { login: "m" } }] } }) }, /waiting on you/],
+  "renamed after the label": [{ world: (w) => w.events.push({ event: "renamed", rename: { from: "a", to: "b" }, actor: { id: 21, login: "alice", type: "User" }, created_at: "2026-09-10T00:00:00Z" }) }, /renamed after/],
+  "safety-critical but allowed_paths names source": [{ spec: { ...SPEC, safety_critical: true, allowed_paths: ["src/**"] }, files: { "src/a.ts": "x\n" } }, /tests and documentation only/],
+  "forbidden path in a different case": [{ files: { "tests/Secret/a.test.ts": "x\n" } }, /forbids/],
+  "the owner changed since the last publish here": [{ ledger: [{ repoId: 1001, ownerId: 5, userId: 21, at: Date.now() - 3 * 86400e3 }] }, /owner is unchanged/],
   "daily limit": [{ ledger: [1, 2, 3].map((i) => ({ repoId: 2000 + i, userId: 21, at: Date.now() - 3600e3 })) }, /daily limit/],
   "CLA required, not acknowledged": [{ spec: { ...SPEC, certification: { dco: "none", cla: "individual" } } }, /CLA acknowledged/],
   "DCO required, not certified": [{ spec: { ...SPEC, certification: { dco: "signed-off-by", cla: "none" } } }, /DCO certification/],
@@ -140,4 +144,22 @@ test("an earlier PR you have answered, closed, or that only just got feedback do
   assert.equal(ok({ pr: { state: "open", updated_at: "2026-10-09T00:00:00Z" }, reviews: [{ state: "CHANGES_REQUESTED", submitted_at: "2026-09-20T00:00:00Z", user: { login: "m" } }] }), true, "answered since");
   assert.equal(ok({ pr: { state: "closed", updated_at: "2026-09-20T00:00:00Z" }, reviews: [{ state: "CHANGES_REQUESTED", submitted_at: "2026-09-20T00:00:00Z", user: { login: "m" } }] }), true, "closed");
   assert.equal(ok({ pr: { state: "open", updated_at: new Date(Date.now() - 86400e3).toISOString() }, reviews: [{ state: "CHANGES_REQUESTED", submitted_at: new Date(Date.now() - 86400e3).toISOString(), user: { login: "m" } }] }), true, "feedback is only a day old");
+});
+
+test("a safety-critical project accepts tests and docs by path, and only those", () => {
+  const spec = { ...SPEC, safety_critical: true, allowed_paths: ["tests/**", "docs/**", "**"] };
+  assert.equal(plan({ spec, files: { "tests/a.test.ts": "x\n", "docs/guide.md": "x\n" } }).out.ok, true);
+  assert.equal(plan({ spec, files: { "lib/core.ts": "x\n" } }).out.ok, false);
+  for (const p of ["tests/a.py", "src/__tests__/x.js", "a/b/c.test.ts", "a/b_test.go", "test_thing.py", "README.md", "docs/a.rst", "x/doc/y.txt"]) assert.equal(isTestOrDocPath(p), true, p);
+  for (const p of ["src/core.ts", "lib/testing_utils.py", "contest/a.ts", "a.txt", "Makefile"]) assert.equal(isTestOrDocPath(p), false, p);
+});
+test("certifications come from a callback (the terminal), are asked once the spec and flagged lines are known, and are bound into the plan", () => {
+  const seen = [];
+  const spec = { ...SPEC, certification: { dco: "signed-off-by", cla: "individual" } };
+  const asked = (answers) => plan({ spec, files: { "tests/n.test.ts": "const k = process.env.X;\n" }, flags: (ctx) => { seen.push(ctx); return answers; } }).out;
+  const yes = asked({ claSigned: true, certifyDco: true, allowFlaggedCode: true });
+  assert.equal(yes.ok, true); assert.deepEqual(yes.bound.ack, { cla: true, dco: true, flagged: true });
+  assert.equal(seen[0].spec.certification.cla, "individual"); assert.match(seen[0].flagged[0], /reads the environment/);
+  const no = asked({}); assert.equal(no.ok, false); assert.deepEqual(no.bound.ack, { cla: false, dco: false, flagged: false });
+  assert.ok(no.checks.filter((c) => !c.ok).map((c) => c.name).join().match(/CLA acknowledged|DCO certification|no code that reads/));
 });

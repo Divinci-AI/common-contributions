@@ -32,6 +32,14 @@ export function scanAdded(files) {
   return out;
 }
 
+/** Tests and documentation, by path: what a safety-critical project accepts regardless of what its own allowed_paths says. */
+export function isTestOrDocPath(p) {
+  const parts = p.split("/"), base = parts.at(-1);
+  if (parts.slice(0, -1).some((d) => ["test", "tests", "__tests__", "spec", "specs", "docs", "doc", "documentation"].includes(d.toLowerCase()))) return true;
+  return /\.(test|spec)\.[A-Za-z0-9]+$/.test(base) || /_test\.[A-Za-z0-9]+$/.test(base) || /^test_[^/]*\.py$/.test(base) || /\.(md|rst)$/i.test(base);
+}
+const fold = (x) => x.normalize("NFC").toLowerCase();
+
 const git = (args, opts = {}) => spawnSync("/usr/bin/git", args, { env: { PATH: "/usr/bin:/bin", GIT_CONFIG_NOSYSTEM: "1" }, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, ...opts });
 
 /** Added/deleted line counts and the unified diff of the recorded files against the BASE commit. New files count all their lines as added. */
@@ -63,7 +71,9 @@ const isOurPr = (p) => p.headRef.startsWith("agent/") || p.body.includes(`<!-- $
  * @returns {{ok:boolean, checks:Array<{name:string,ok:boolean,detail:string}>, bound?:object, spec?:object, diff?:object, warnings:string[]}}
  */
 export function planPublish(o) {
-  const { gh, record, key, reviewedTrees, target, issueNumber, user, repoDir, ledger = [], now = Date.now(), flags = {} } = o;
+  const { gh, record, key, reviewedTrees, target, issueNumber, user, repoDir, ledger = [], now = Date.now() } = o;
+  let flags = o.flags ?? {};
+  const ack = {};
   const checks = [], warnings = [];
   const add = (name, ok, detail = "") => { checks.push({ name, ok, detail }); return ok; };
   const result = (extra = {}) => ({ ok: checks.every((c) => c.ok), checks, warnings, ...extra });
@@ -121,6 +131,8 @@ export function planPublish(o) {
     const relevant = events.filter((e) => (e.event === "labeled" || e.event === "unlabeled") && e.label === spec.task_label).sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
     const latest = relevant.at(-1);
     const okLabel = latest?.event === "labeled" && latest.actorType !== "Bot" && maintainers.some((m) => m.id === latest.actorId) && Date.parse(latest.createdAt) >= Date.parse(issue.createdAt);
+    const renamedAfter = okLabel ? events.filter((e) => e.event === "renamed" && Date.parse(e.createdAt) > Date.parse(latest.createdAt)) : [];
+    if (okLabel) add("issue was not renamed after it was labelled", renamedAfter.length === 0, "the title was changed after a maintainer labelled the issue");
     add("the task label was applied by a listed maintainer", okLabel === true, latest ? `latest "${spec.task_label}" event is ${latest.event} by ${latest.actorLogin ?? "unknown"}` : `no "${spec.task_label}" label event found`);
     if (okLabel) {
       const edited = guard("issue edit time", () => gh.issueLastEdit(repo.ownerLogin, repo.fullName.split("/")[1], issueNumber));
@@ -136,14 +148,17 @@ export function planPublish(o) {
   // 6. the diff
   const globs = (list, p) => list.some((g) => globMatch(g, p));
   add("no tool-forbidden path", !paths.some((p) => globs(TOOL_FORBIDDEN, p)), paths.filter((p) => globs(TOOL_FORBIDDEN, p)).join(", "));
-  add("no path the project forbids", !paths.some((p) => globs(spec.forbidden_paths, p)), paths.filter((p) => globs(spec.forbidden_paths, p)).join(", "));
-  if (spec.allowed_paths.length > 0) add(spec.safety_critical ? "safety-critical project: tests and docs only" : "every path is allowed by the project", paths.every((p) => globs(spec.allowed_paths, p)), paths.filter((p) => !globs(spec.allowed_paths, p)).join(", "));
+  const forbid = (p) => spec.forbidden_paths.some((g) => globMatch(fold(g), fold(p)));
+  add("no path the project forbids (compared without regard to case)", !paths.some(forbid), paths.filter(forbid).join(", "));
+  if (spec.allowed_paths.length > 0) add("every path is allowed by the project", paths.every((p) => globs(spec.allowed_paths, p)), paths.filter((p) => !globs(spec.allowed_paths, p)).join(", "));
+  if (spec.safety_critical) add("safety-critical project: tests and documentation only", paths.every(isTestOrDocPath), paths.filter((p) => !isTestOrDocPath(p)).join(", "));
   const diff = guard("diff against the base", () => diffAgainstBase(repoDir, record.base, files));
   if (diff) add("diff is small enough", diff.total <= Math.min(spec.max_diff_lines, TOOL_MAX_DIFF), `${diff.total} changed lines, limit ${Math.min(spec.max_diff_lines, TOOL_MAX_DIFF)}`);
   if (spec.changelog?.required) { const re = new RegExp("^" + spec.changelog.path.replace(/[.*+?^$()|[\]\\]/g, "\\$&").replace("\\{issue\\}", String(issueNumber)).replace("{issue}", String(issueNumber)).replace(/\{type\}/g, "[a-z]+") + "$"); add("changelog entry present", paths.some((p) => re.test(p)), `this project requires a changelog file like ${spec.changelog.path}`); }
   const hidden = paths.flatMap((p) => hiddenChars(files[p]).map((c) => `${p} ${c}`));
   add("no hidden characters in the files", hidden.length === 0, hidden.slice(0, 5).join(", "));
   const flagged = scanAdded(files);
+  if (typeof flags === "function") flags = flags({ spec, flagged, user });
   add("no code that reads the environment, uses the network or starts processes", flagged.length === 0 || flags.allowFlaggedCode === true, flagged.slice(0, 5).join("; ") + (flagged.length > 5 ? ` (+${flagged.length - 5} more)` : "") + " (shown for review; pass --allow-flagged-code after reading)");
 
   // 7. load on the maintainers
@@ -160,6 +175,8 @@ export function planPublish(o) {
     if (total !== undefined) add("search finds no more agent PRs than the limit allows", total < Math.min(spec.max_open_agent_prs, TOOL_MAX_OPEN), `search reports ${total} (advisory; it lags)`);
   }
   const recent = ledger.filter((l) => l.userId === user.id && now - l.at < DAY);
+  const last = ledger.filter((l) => l.repoId === repo.id && l.ownerId !== undefined).at(-1);
+  if (last) add("the project's owner is unchanged since your last publish here", last.ownerId === repo.ownerId, "the repository now belongs to a different owner than when you last published; the old owner's opt-in is not the new owner's consent. Ask the new owner");
   add("not already published here in the last 24 hours", !recent.some((l) => l.repoId === repo.id), "your ledger shows a publish to this project in the last 24 hours");
   add("under the daily limit across projects", recent.length < TOOL_MAX_PER_DAY, `${recent.length} publishes in the last 24 hours, limit ${TOOL_MAX_PER_DAY}`);
 
@@ -174,10 +191,11 @@ export function planPublish(o) {
   add("none of your earlier PRs is waiting on you", waiting.length === 0, `answer or close first: ${waiting.join(", ")}`);
 
   // 8. certification the human must make
+  ack.cla = flags.claSigned === true; ack.dco = flags.certifyDco === true; ack.flagged = flags.allowFlaggedCode === true;
   if (spec.certification.cla !== "none") add("CLA acknowledged", flags.claSigned === true, `this project requires a ${spec.certification.cla} CLA; pass --cla-signed once YOU have signed it (it can bind your employer)`);
   if (spec.certification.dco === "signed-off-by") add("DCO certification given", flags.certifyDco === true, "this project requires a Signed-off-by line; pass --certify-dco only if YOU can certify the Developer Certificate of Origin for this change");
 
-  return result({ spec, diff, issueTitle: issue.title, bound: { repoId: repo.id, ownerId: repo.ownerId, fullName: repo.fullName, defaultBranch: repo.defaultBranch, base: record.base, head, specBlobSha: f.blobSha, specCommit: lc?.sha ?? null, recordSha: record.recordSha, issueNumber, user: { login: user.login, id: user.id, name: user.name, email: user.email } } });
+  return result({ spec, diff, issueTitle: issue.title, info: { contact: spec.contact, policyUrl: spec.policy_url, safetyReason: spec.safety_reason, safetyCritical: spec.safety_critical, flagged }, bound: { ack, repoId: repo.id, ownerId: repo.ownerId, fullName: repo.fullName, defaultBranch: repo.defaultBranch, base: record.base, head, specBlobSha: f.blobSha, specCommit: lc?.sha ?? null, recordSha: record.recordSha, issueNumber, user: { login: user.login, id: user.id, name: user.name, email: user.email } } });
 }
 
 export { isPlainText };

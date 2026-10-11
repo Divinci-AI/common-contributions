@@ -1,14 +1,20 @@
-/** Confirmations come from the controlling terminal, never argv or stdin: an agent in the same shell cannot type them by passing flags or piping input. */
+/**
+ * Confirmations come from the controlling terminal, never argv or stdin, so they are not typed by passing a flag or piping input. This deters a hurried
+ * human and an agent that only has a pipe; it does NOT stop a local program that opens its own pseudo-terminal (script, expect, pty), and an agent with
+ * your gh login could call the GitHub API directly. Say so wherever the control is described.
+ */
 import { closeSync, openSync, readSync, writeSync } from "node:fs";
+
+export const decodeLine = (bytes) => Buffer.from(bytes).toString("utf8").replace(/\r$/, "");
 
 export function ttyAsk(prompt) {
   let fd;
   try { fd = openSync("/dev/tty", "r+"); } catch { throw new Error("no terminal available: publishing needs a person at a terminal (confirmations are read from /dev/tty)"); }
   try {
     writeSync(fd, prompt);
-    const buf = Buffer.alloc(1); let line = "";
-    while (readSync(fd, buf, 0, 1, null) === 1) { const c = buf.toString("utf8"); if (c === "\n") break; line += c; if (line.length > 2000) break; }
-    return line.replace(/\r$/, "");
+    const buf = Buffer.alloc(1); const bytes = [];
+    while (readSync(fd, buf, 0, 1, null) === 1) { if (buf[0] === 10) break; bytes.push(buf[0]); if (bytes.length > 8000) break; }
+    return decodeLine(bytes);
   } finally { closeSync(fd); }
 }
 

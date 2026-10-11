@@ -12,22 +12,28 @@ import { gitBlobId } from "./record.mjs";
 import { hiddenChars, isPlainText } from "./optin.mjs";
 
 const NOT_SAFE_TEXT = (s) => hiddenChars(s).length > 0 || /@/.test(s);
+/** Closing keywords and issue references notify or CLOSE things in other places. The tool adds its own `Refs #N`; a human's text may not add others. */
+const REFERENCES = /\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\b[^\n]{0,20}#\d|[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+|(^|[^A-Za-z0-9_&])#\d+/i;
 
 /** The PR title and commit subject come from target-repo issue text, so they are filtered like everything else a human will read. */
 export function cleanTitle(raw) {
   const t = String(raw).replace(/\s+/g, " ").trim();
   if (!t) throw new Error("the issue title is empty");
   if (t.length > 120) throw new Error("the issue title is longer than 120 characters");
+  if (REFERENCES.test(t)) throw new Error("the issue title contains an issue reference or a closing keyword; write the title yourself with --title");
   if (NOT_SAFE_TEXT(t) || /https?:|www\.|\]\(|<|>|`/.test(t)) throw new Error("the issue title has hidden characters, a link, markup or an @ mention; write the title yourself with --title");
   return t;
 }
 
-export function cleanDescription(text) {
+export function cleanDescription(text, issueNumber) {
   if (typeof text !== "string" || text.trim().length < 20) throw new Error("the PR description must be written by you (at least 20 characters); pass --description-file");
   if (text.length > 5000) throw new Error("the PR description is longer than 5000 characters");
   if (hiddenChars(text).length > 0) throw new Error("the PR description has hidden characters");
   if (/@/.test(text)) throw new Error("the PR description has an @ (mentions notify people; remove it)");
   if (/!\[/.test(text)) throw new Error("the PR description has an image");
+  if (/<!--|<[A-Za-z\/]/.test(text)) throw new Error("the PR description has raw HTML or a comment (it could forge the marker or track readers)");
+  for (const m of text.matchAll(/(^|[^A-Za-z0-9_&])#(\d+)/g)) if (issueNumber === undefined || Number(m[2]) !== issueNumber) throw new Error(`the PR description references #${m[2]}; mention only the issue this change is for (it would notify other threads)`);
+  if (/\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\b[^\n]{0,20}#\d|[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#\d+/i.test(text)) throw new Error("the PR description has a closing keyword or a cross-repository reference");
   return text.trim();
 }
 
@@ -52,7 +58,7 @@ const cleanPerson = (n) => { if (!/^[^<>\n@]{1,80}$/.test(n ?? "") || hiddenChar
 const cleanEmail = (e) => { if (!/^[^\s<>@]{1,64}@[^\s<>@]{1,120}$/.test(e ?? "") || hiddenChars(e).length) throw new Error("your git user.email is not usable"); return e; };
 
 export function buildPrBody({ description, spec, issueNumber, record, sentence, specBlobSha }) {
-  const parts = [cleanDescription(description)];
+  const parts = [cleanDescription(description, issueNumber)];
   if (spec.disclosure.mechanism === "pr_body") parts.push(spec.disclosure.text);
   parts.push(`Refs #${issueNumber}`);
   parts.push(`Submitter's note: ${sentence}`);

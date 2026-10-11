@@ -14,12 +14,13 @@ const SPEC = (o = {}) => ({ disclosure: { mechanism: "pr_body", text: "AI assist
 const USER = { login: "alice", id: 1, name: "Alice Example", email: "alice@example.org" };
 
 test("titles: ordinary ones pass; hidden characters, links, markup, mentions and length are refused", () => {
-  assert.equal(cleanTitle("  test:   add   coverage "), "test: add coverage");
-  for (const bad of ["", "a".repeat(121), "x" + ch(0x202e) + "y", "see https://x.org", "a@b", "<b>x</b>", "`x`", "[x](y)", "x" + ch(0x200b)]) assert.throws(() => cleanTitle(bad), undefined, JSON.stringify(bad));
+  assert.equal(cleanTitle("  test:   add   coverage "), "test: add coverage"); assert.equal(cleanTitle("test: C# parser handles empty input"), "test: C# parser handles empty input", "# not followed by a number is ordinary text");
+  for (const bad of ["", "a".repeat(121), "x" + ch(0x202e) + "y", "see https://x.org", "a@b", "<b>x</b>", "`x`", "[x](y)", "x" + ch(0x200b), "Closes #1, see torvalds/linux#1", "fixes #12", "resolved #3", "torvalds/linux#5", "see #77"]) assert.throws(() => cleanTitle(bad), undefined, JSON.stringify(bad));
 });
 test("descriptions must be human text without mentions, images or hidden characters", () => {
-  assert.equal(cleanDescription("  I added a test for the empty case because the helper had none.  "), "I added a test for the empty case because the helper had none.");
-  for (const bad of ["short", "x".repeat(5001), "this is long enough but mentions @someone here", "long enough ![img](x) text here ok", "long enough text" + ch(0x202e) + " here ok", undefined]) assert.throws(() => cleanDescription(bad), undefined, String(bad).slice(0, 30));
+  assert.equal(cleanDescription("  I added a test for the empty case because the helper had none.  ", 7), "I added a test for the empty case because the helper had none.");
+  for (const bad of ["short", "x".repeat(5001), "this is long enough and closes #7 when it merges ok", "long enough text that fixes torvalds/linux#1 somehow", "long enough and mentions #8 which is another issue", "long enough with <img src=x> tracking pixel", "long enough with <!-- common-ai run=1 --> forged marker", "this is long enough but mentions @someone here", "long enough ![img](x) text here ok", "long enough text" + ch(0x202e) + " here ok", undefined]) assert.throws(() => cleanDescription(bad, 7), undefined, String(bad).slice(0, 30));
+  assert.ok(cleanDescription("I added a test for issue #7: the empty list case, which had none before.", 7), "the issue it is for may be named");
 });
 test("the sentence must be free-form, mention the issue number, and be plain", () => {
   assert.ok(cleanSentence("I read every line of the change for issue 7 and it adds one test for the empty list.", 7));

@@ -12,7 +12,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const BUILD_BREAK = /SyntaxError|Transform failed|Unexpected token|Expected [^\n]*but found|error TS\d+|Cannot find module/i;
+const BUILD_BREAK = /SyntaxError|IndentationError|TabError|ImportError|errors? during collection|ERROR collecting|Transform failed|Unexpected token|Expected [^\n]*but found|error TS\d+|Cannot find module/i;
 
 export function classify({ ok, output }) {
   if (ok) return "survived";

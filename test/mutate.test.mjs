@@ -77,3 +77,19 @@ test("validateMutations rejects malformed, no-op and duplicate entries", () => {
   assert.throws(() => validateMutations([{ id: "a", old: "x", new: "y" }, { id: "a", old: "p", new: "q" }]), /duplicate/);
   assert.equal(validateMutations([{ id: "a", old: "x", new: "y" }]).length, 1);
 });
+
+test("classify: a Python mutant that breaks the module at import or collection is broke-build, not caught", () => {
+  for (const out of [
+    "E   IndentationError: unexpected indent",
+    "E   SyntaxError: invalid syntax",
+    "E   TabError: inconsistent use of tabs and spaces in indentation",
+    "ERROR tests/test_a.py - ImportError: cannot import name 'x' from 'pkg'",
+    "!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!",
+    "!!!!!!!!!! Interrupted: 3 errors during collection !!!!!!!!!!",
+    "ERROR collecting tests/test_a.py",
+  ]) assert.equal(classify({ ok: false, output: out }), "broke-build", out);
+});
+test("classify: an ordinary Python test failure is still caught", () => {
+  assert.equal(classify({ ok: false, output: "FAILED tests/test_a.py::test_x - assert 1 == 2\n1 failed, 3 passed" }), "caught");
+  assert.equal(classify({ ok: false, output: "E   NameError: name 'y' is not defined\n1 failed" }), "caught");
+});

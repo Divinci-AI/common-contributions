@@ -131,3 +131,34 @@ test("memory: a 1.4 GB allocation survives a 3 GB limit (RED) and is killed by t
   const g = green(SRC(), probe);
   assert.match(g.stdout, /RAN:mem/); assert.doesNotMatch(g.stdout, /SURVIVED/); assert.equal(g.ok, false);
 });
+
+import { readRuntime, runtimeMismatch } from "../src/container.mjs";
+
+test("runtime pin on a REAL daemon: the recorded runtime passes, a doctored kernel string refuses", { skip }, () => {
+  const actual = readRuntime(DOCKER);
+  assert.match(actual.kernel, /orbstack/i, `unexpected runtime ${JSON.stringify(actual)}`);
+  assert.deepEqual(runtimeMismatch(actual, actual), []);
+  const ok = runContained({ docker: DOCKER, image: IMAGE, srcDir: SRC(), cmd: sh("echo RAN:pin"), runId: rid(), pin: actual });
+  assert.equal(ok.ran, true, ok.refused); assert.deepEqual(ok.runtime, actual);
+  const bad = runContained({ docker: DOCKER, image: IMAGE, srcDir: SRC(), cmd: sh("echo SHOULD-NOT-RUN"), runId: rid(), pin: { ...actual, kernel: actual.kernel + "-tampered" } });
+  assert.equal(bad.ran, false); assert.match(bad.refused, /runtime differs/);
+});
+
+test("an image that declares VOLUME is refused: the anonymous volume is not on the mount allowlist", { skip }, () => {
+  const dir = tmp(); writeFileSync(join(dir, "Dockerfile"), "FROM alpine:3.20\nVOLUME /data\n");
+  const tag = `cc-vol-test:${process.pid}`;
+  const b = spawnSync(DOCKER, ["build", "-q", "--no-cache", "-t", tag, dir], { env: dockerEnv(), encoding: "utf8" });
+  assert.equal(b.status, 0, b.stderr);
+  const id = spawnSync(DOCKER, ["image", "inspect", tag, "--format", "{{.Id}}"], { env: dockerEnv(), encoding: "utf8" }).stdout.trim().replace(/^sha256:/, "");
+  try {
+    const r = runContained({ docker: DOCKER, image: id, srcDir: SRC(), cmd: sh("echo SHOULD-NOT-RUN"), runId: rid() });
+    assert.equal(r.ran, false); assert.match(r.refused, /mounts are not exactly/);
+  } finally { spawnSync(DOCKER, ["rmi", "-f", tag], { env: dockerEnv() });  }
+});
+
+test("many short-lived processes do not exhaust the pids limit (--init reaps them)", { skip }, () => {
+  const probe = "echo RAN:zombies; i=0; while [ $i -lt 400 ]; do (sh -c 'exit 0' &) ; i=$((i+1)); done; sleep 1; set -- /proc/[0-9]*; echo COUNT:$#; echo DONE";
+  const g = green(SRC(), probe);
+  assert.match(g.stdout, /RAN:zombies/); assert.match(g.stdout, /DONE/);
+  assert.ok(Number(/COUNT:(\d+)/.exec(g.stdout)?.[1]) < 30, g.stdout);
+});

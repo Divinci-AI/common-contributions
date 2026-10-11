@@ -23,7 +23,7 @@ export function buildCreateArgs({ image, name, runId, srcDir, cmd, limits = LIMI
     "--network", "none", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--user", USER,
     "--pids-limit", String(limits.pids), "--memory", String(limits.memoryBytes), "--memory-swap", String(limits.memoryBytes),
     "--cpus", String(limits.cpuNano / 1e9), "--ulimit", `nofile=${limits.nofile}`, "--ulimit", `fsize=${limits.fsizeBytes}`,
-    "--ipc", "none", "--shm-size", String(limits.shmBytes),
+    "--ipc", "none", "--shm-size", String(limits.shmBytes), "--init", "--log-driver", "none",
     "--tmpfs", "/tmp:rw,nosuid,size=64m", "--tmpfs", "/work/out:rw,nosuid,size=64m",
     "--mount", `type=bind,source=${srcDir},target=/work/src,readonly`,
     "--workdir", "/work/src", "--env", "CI=1", "--env", "HOME=/tmp",
@@ -54,6 +54,8 @@ export function checkInspect(i, { image, srcDir, limits = LIMITS }) {
   want(h.PidsLimit === limits.pids, `PidsLimit is ${h.PidsLimit}`);
   want(h.Memory === limits.memoryBytes && h.MemorySwap === limits.memoryBytes, "memory/swap limits are wrong");
   want(h.ShmSize === limits.shmBytes, `ShmSize is ${h.ShmSize}`);
+  want(h.Init === true, "no init process (zombies would eat the pids limit)");
+  want(h.LogConfig?.Type === "none", `log driver is ${h.LogConfig?.Type}, want none (a flood would fill the VM disk)`);
   want(c.User === USER, `User is "${c.User}", want ${USER}`);
   want(i?.Image === image || i?.Image?.replace(/^sha256:/, "").startsWith(image.replace(/^sha256:/, "").slice(0, 12)), "image is not the expected one");
   const tmpfs = Object.keys(h.Tmpfs ?? {}).sort().join(",");
@@ -68,17 +70,30 @@ export function checkInspect(i, { image, srcDir, limits = LIMITS }) {
 
 const sh = (docker, args, opts = {}) => spawnSync(docker, args, { env: dockerEnv(), encoding: "utf8", maxBuffer: 8 * 1024 * 1024, ...opts });
 
+/** What the daemon actually is. The pin is the FULL kernel string (it carries the OrbStack build suffix) and the engine version. */
+export function readRuntime(docker) {
+  const r = sh(docker, ["info", "--format", "{{.ServerVersion}}|{{.KernelVersion}}|{{.OperatingSystem}}"]);
+  const [engine, kernel, os] = (r.stdout || "").trim().split("|");
+  return { engine, kernel, os };
+}
+export const runtimeMismatch = (actual, pin) => (pin && ["engine", "kernel", "os"].filter((k) => actual?.[k] !== pin[k]).map((k) => `${k}: ${actual?.[k]} != pinned ${pin[k]}`)) || [];
+
 /**
  * Create, inspect, check, start, reap. Never throws for a failing command; returns {refused} when preflight fails.
  * `docker` must be an absolute path (a shim earlier on PATH cannot stand in for it).
  */
-export function runContained({ docker, image, srcDir, cmd, runId, limits = LIMITS, createArgsOverride }) {
+export function runContained({ docker, image, srcDir, cmd, runId, limits = LIMITS, createArgsOverride, pin }) {
   if (!isAbsolute(docker)) throw new Error("docker must be an absolute path");
+  if (pin) {
+    const actual = readRuntime(docker);
+    const bad = runtimeMismatch(actual, pin);
+    if (bad.length > 0) return { ran: false, refused: `runtime differs from the tested one (${bad.join("; ")}); the boundary was only tested on the pinned runtime`, runtime: actual };
+  }
   const name = `cc-${runId}`;
   const args = buildCreateArgs({ image, name, runId, srcDir, cmd, limits });
   const created = sh(docker, createArgsOverride ? createArgsOverride(args) : args);
   if (created.status !== 0) return { ran: false, refused: `docker create failed: ${(created.stderr || "").trim().slice(0, 300)}` };
-  const reap = () => { sh(docker, ["kill", name]); sh(docker, ["rm", "-f", name]); };
+  const reap = () => { sh(docker, ["kill", name]); sh(docker, ["rm", "-fv", name]); };
   try {
     const ins = sh(docker, ["inspect", name]);
     let parsed;
@@ -87,7 +102,7 @@ export function runContained({ docker, image, srcDir, cmd, runId, limits = LIMIT
     if (problems.length > 0) return { ran: false, refused: `preflight failed: ${problems.join("; ")}` };
     const r = sh(docker, ["start", "-a", name], { timeout: limits.timeoutMs, maxBuffer: limits.maxOutputBytes });
     const timedOut = r.error?.code === "ETIMEDOUT" || r.signal === "SIGTERM";
-    return { ran: true, ok: r.status === 0 && !timedOut, status: r.status, timedOut, outputTruncated: r.error?.code === "ENOBUFS", stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+    return { ran: true, runtime: pin ? readRuntime(docker) : undefined, ok: r.status === 0 && !timedOut, status: r.status, timedOut, outputTruncated: r.error?.code === "ENOBUFS", stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
   } finally {
     reap();
   }

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chmodSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { buildCreateArgs, checkInspect, dockerEnv, runContained, LIMITS, USER } from "../src/container.mjs";
+import { buildCreateArgs, checkInspect, dockerEnv, runContained, runtimeMismatch, LIMITS, USER } from "../src/container.mjs";
 import { tmp } from "./helpers.mjs";
 
 const IMAGE = "sha256:" + "a".repeat(64);
@@ -13,7 +13,7 @@ const good = () => ({
     NetworkMode: "none", ReadonlyRootfs: true, Privileged: false, CapDrop: ["ALL"], CapAdd: null, SecurityOpt: ["no-new-privileges"],
     PidMode: "", IpcMode: "none", UTSMode: "", Devices: [], Sysctls: null, ExtraHosts: null, Dns: [],
     PidsLimit: LIMITS.pids, Memory: LIMITS.memoryBytes, MemorySwap: LIMITS.memoryBytes, ShmSize: LIMITS.shmBytes,
-    Tmpfs: { "/tmp": "rw,nosuid,size=64m", "/work/out": "rw,nosuid,size=64m" },
+    Tmpfs: { "/tmp": "rw,nosuid,size=64m", "/work/out": "rw,nosuid,size=64m" }, Init: true, LogConfig: { Type: "none" },
   },
   Config: { User: USER, Env: ["CI=1", "HOME=/tmp", "PATH=/usr/bin"] },
   Mounts: [{ Source: SRC, Destination: "/work/src", RW: false }],
@@ -47,6 +47,9 @@ const weaken = {
   "extra mount": (i) => i.Mounts.push({ Source: "/Users/x", Destination: "/h", RW: true }),
   "writable source": (i) => (i.Mounts[0].RW = true),
   "docker socket": (i) => (i.Mounts[0].Source = "/var/run/docker.sock"),
+  "no init": (i) => (i.HostConfig.Init = false),
+  "json-file log driver": (i) => (i.HostConfig.LogConfig.Type = "json-file"),
+  "an image VOLUME materialised as an anonymous volume": (i) => i.Mounts.push({ Type: "volume", Source: "/var/lib/docker/volumes/abc/_data", Destination: "/data", RW: true }),
   "extra env": (i) => i.Config.Env.push("AWS_SECRET_ACCESS_KEY=x"),
 };
 for (const [name, mutate] of Object.entries(weaken)) {
@@ -66,7 +69,7 @@ test("create args: tags, relative paths and mount-injecting paths are refused", 
   assert.throws(() => buildCreateArgs({ ...base, image: IMAGE, srcDir: "rel" }), /absolute/);
   assert.throws(() => buildCreateArgs({ ...base, image: IMAGE, srcDir: "/a,source=/Users" }), /':' or ','/);
   const a = buildCreateArgs({ ...base, image: IMAGE, srcDir: SRC });
-  for (const f of ["--network", "none", "--read-only", "--cap-drop", "ALL", "--pull", "never", "--ipc"]) assert.ok(a.includes(f), f);
+  for (const f of ["--network", "none", "--read-only", "--cap-drop", "ALL", "--pull", "never", "--ipc", "--init", "--log-driver"]) assert.ok(a.includes(f), f);
   assert.ok(!a.some((x) => /docker\.sock|privileged/.test(x)));
 });
 
@@ -80,6 +83,7 @@ function fakeDocker({ inspect, startScript = "echo hello; exit 0", createStatus 
   writeFileSync(insp, JSON.stringify([inspect]));
   writeFileSync(bin, `#!/bin/sh
 echo "$1" >> "${log}"
+echo "$*" >> "${log}.argv"
 case "$1" in
   create) exit ${createStatus};;
   inspect) cat "${insp}";;
@@ -88,7 +92,7 @@ case "$1" in
 esac
 `);
   chmodSync(bin, 0o755);
-  return { bin, calls: () => (existsSync(log) ? readFileSync(log, "utf8").trim().split("\n") : []) };
+  return { bin, argv: () => readFileSync(`${log}.argv`, "utf8"), calls: () => (existsSync(log) ? readFileSync(log, "utf8").trim().split("\n") : []) };
 }
 
 test("a forged-good inspect lets the run start; the container is always reaped", () => {
@@ -120,4 +124,22 @@ test("docker create failing, or a relative docker path, runs nothing", () => {
   const f = fakeDocker({ inspect: good(), createStatus: 1 });
   assert.equal(runContained({ docker: f.bin, image: IMAGE, srcDir: SRC, cmd: ["true"], runId: "t4" }).ran, false);
   assert.throws(() => runContained({ docker: "docker", image: IMAGE, srcDir: SRC, cmd: ["true"], runId: "t5" }), /absolute/);
+});
+
+test("the argv given to docker create carries the flags inspect cannot see (--pull never, --network none, --log-driver none, --init)", () => {
+  const f = fakeDocker({ inspect: good() });
+  runContained({ docker: f.bin, image: IMAGE, srcDir: SRC, cmd: ["true"], runId: "t6" });
+  const create = f.argv().split("\n").find((l) => l.startsWith("create"));
+  for (const flag of ["--pull never", "--network none", "--log-driver none", "--init", "--read-only", "--cap-drop ALL", "--ipc none"]) assert.ok(create.includes(flag), `create argv lacks ${flag}`);
+});
+
+test("the runtime pin: a different kernel build or engine REFUSES the run before anything is created", () => {
+  const pin = { engine: "29.4.0", kernel: "7.0.14-orbstack-00380-ga7e0a2dc9535", os: "OrbStack" };
+  assert.deepEqual(runtimeMismatch({ ...pin }, pin), []);
+  assert.equal(runtimeMismatch({ ...pin, kernel: "7.0.14-orbstack-00999-gdeadbeef" }, pin).length, 1);
+  assert.equal(runtimeMismatch({ ...pin, engine: "30.0.0" }, pin).length, 1);
+  const f = fakeDocker({ inspect: good() });
+  const r = runContained({ docker: f.bin, image: IMAGE, srcDir: SRC, cmd: ["true"], runId: "t7", pin });
+  assert.equal(r.ran, false); assert.match(r.refused, /runtime differs/);
+  assert.ok(!f.calls().includes("create"), "nothing may be created on an untested runtime");
 });

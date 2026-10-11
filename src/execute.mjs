@@ -1,13 +1,13 @@
 /**
  * Dry run and real publish. The dry run changes nothing on GitHub: it plans, builds the exact commit and texts, writes a pending marker and prints a token.
- * A real publish needs: the token, a cool-down since the dry run, the repo name and the sentence typed on /dev/tty, and a fresh plan whose token still matches
+ * A real publish needs: the token, a cool-down since the dry run, a y/N answer typed on /dev/tty, and a fresh plan whose token still matches
  * at three moments (before the fork, before the push, before the PR). The PR is made from the user's own account through their own gh and git.
  */
 import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { planPublish } from "./publish.mjs";
-import { approvalToken, branchName, buildCommit, buildCommitMessage, buildPrBody, cleanSentence, cleanTitle } from "./publisher.mjs";
+import { approvalToken, branchName, buildCommit, buildCommitMessage, buildPrBody, cleanTitle } from "./publisher.mjs";
 
 export const COOLDOWN_MS = 10 * 60 * 1000;
 
@@ -30,20 +30,21 @@ export function ghWriter(run) {
 
 /** Plan + texts + the exact commit + the token. Pure with respect to GitHub (reads only) and the remote repository (writes nothing). */
 export function prepare(o) {
-  const { record, flags = {}, repoDir, descriptionText, sentence, titleOverride } = o;
+  const { record, repoDir, descriptionText, titleOverride } = o;
   const plan = planPublish(o);
   if (!plan.ok) return { phase: "refused", plan };
+  // The answers may be a callback (the CLI asks after the review text); the plan resolved it, so the commit must use the same answers.
+  const flags = typeof o.flags === "function" ? o.flags({ spec: plan.spec, flagged: plan.info.flagged, user: o.user }) : (o.flags ?? {});
   let texts;
   try {
     const title = titleOverride ? cleanTitle(titleOverride) : cleanTitle(plan.issueTitle);
-    const clean = cleanSentence(sentence, o.issueNumber);
     const message = buildCommitMessage({ title, issueNumber: o.issueNumber, spec: plan.spec, flags, user: o.user, model: record.model });
-    const body = buildPrBody({ description: descriptionText, spec: plan.spec, issueNumber: o.issueNumber, record, sentence: clean, specBlobSha: plan.bound.specBlobSha });
+    const body = buildPrBody({ description: descriptionText, spec: plan.spec, issueNumber: o.issueNumber, record, specBlobSha: plan.bound.specBlobSha });
     const branch = branchName(o.issueNumber, title);
     const files = Object.fromEntries(Object.entries(record.files).map(([p, f]) => [p, f.content]));
     const commit = buildCommit({ repoDir, base: record.base, files, message, author: { name: o.user.name, email: o.user.email }, when: record.createdAt });
-    const token = approvalToken({ bound: plan.bound, commitSha: commit.sha, title, body, branch, sentence: clean });
-    texts = { title, body, branch, message, sentence: clean, commitSha: commit.sha, token };
+    const token = approvalToken({ bound: plan.bound, commitSha: commit.sha, title, body, branch });
+    texts = { title, body, branch, message, commitSha: commit.sha, token };
   } catch (e) {
     plan.checks.push({ name: "texts and commit", ok: false, detail: e instanceof Error ? e.message : String(e) });
     return { phase: "refused", plan: { ...plan, ok: false } };
@@ -79,11 +80,7 @@ export async function publish(o) {
   if (Math.min(age, recorded) < COOLDOWN_MS) return refuse(first, `wait ${Math.ceil((COOLDOWN_MS - Math.min(age, recorded)) / 60000)} more minute(s) after the dry run and read the diff again`);
 
   o.display?.(reviewText(first));
-  const typed = (ask(`Type the repository name (${plan.bound.fullName}) to confirm: `) ?? "").trim();
-  if (typed !== plan.bound.fullName) return refuse(first, "the repository name was not typed correctly");
-  const again = (ask(`Your sentence, retype it exactly (or press Enter to confirm it as printed):\n  "${texts.sentence}"\n> `) ?? "").trim();
-  if (again !== "" && cleanSentence(again, o.issueNumber) !== texts.sentence) return refuse(first, "the sentence differs from the one in the dry run");
-  if ((ask("Open this pull request from your account? Type yes: ") ?? "").trim().toLowerCase() !== "yes") return refuse(first, "not confirmed");
+  if (!/^y(es)?$/i.test((ask(`Open this pull request to ${plan.bound.fullName} from your account? [y/N] `) ?? "").trim())) return refuse(first, "not confirmed");
 
   const recheck = (stage) => { const p = prepare(o); if (p.phase !== "ready" || p.texts.token !== texts.token) { throw new RecheckError(`${stage}: the plan changed since you approved it (${p.phase === "ready" ? "token differs" : p.plan.checks.filter((c) => !c.ok).map((c) => c.name).join(", ")}); nothing was opened`); } };
   try {

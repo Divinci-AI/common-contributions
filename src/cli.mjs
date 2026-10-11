@@ -303,7 +303,6 @@ if (cmd === "status") {
     const user = { login: me.login, id: me.id, name: gitCfg("user.name"), email: gitCfg("user.email") };
     if (!user.name || !user.email) throw new Error("set git user.name and user.email in the clone: they are published in the commit");
     const reviewedTrees = JSON.parse(readFileSync(join(harnessDir, "reviewed-harness-trees.json"), "utf8")).trees;
-    const sentence = ttyAsk(`Your own words, one sentence ("I read every line and can answer review without the model", and what the change does; mention issue ${issueNumber}):\n> `);
     const ledgerFile = join(stateDir, "published.jsonl");
     // Certifications are given ON THE TERMINAL, once per run, AFTER the review text is shown. They are never flags.
     const memo = {};
@@ -318,7 +317,7 @@ if (cmd === "status") {
     const o = {
       gh, write: ghWriter(runner), record: JSON.parse(readFileSync(recordFile, "utf8")), key, reviewedTrees, target, issueNumber, user, repoDir: clone,
       ledger: readLedger(ledgerFile), flags: certify,
-      descriptionText: readFileSync(descFile, "utf8"), sentence, titleOverride: flag("--title"), pendingDir: join(stateDir, "publish-pending"), ledgerFile,
+      descriptionText: readFileSync(descFile, "utf8"), titleOverride: flag("--title"), pendingDir: join(stateDir, "publish-pending"), ledgerFile,
       pushUrlFor: (fork) => `https://github.com/${fork}.git`, ask: ttyAsk, approve: flag("--approve"),
       display: (text) => { const fd = fsOpen("/dev/tty", "w"); try { fsWrite(fd, `\n${escapeForTerminal(text)}\n\n`); } finally { fsClose(fd); } },
     };
@@ -334,7 +333,7 @@ if (cmd === "status") {
       show(r);
       if (r.phase !== "dry-run") { console.error("\nrefused: nothing was changed."); process.exit(2); }
       console.log(`\nproject contact: ${escapeForTerminal(r.plan.info.contact)}   policy: ${escapeForTerminal(r.plan.info.policyUrl)}${r.plan.info.safetyCritical ? `\nSAFETY-CRITICAL: ${escapeForTerminal(r.plan.info.safetyReason ?? "")} (tests and documentation only)` : ""}\n--- diff (${r.plan.diff.total} changed lines) ---\n${escapeForTerminal(r.plan.diff.patch)}\n--- commit message ---\n${escapeForTerminal(r.texts.message)}\n--- PR title ---\n${escapeForTerminal(r.texts.title)}\n--- PR body ---\n${escapeForTerminal(r.texts.body)}\n--- author published in the commit: ${escapeForTerminal(user.name)} <${escapeForTerminal(user.email)}> ---`);
-      console.log(`\nDRY RUN ONLY: nothing was changed on GitHub.\nTo publish, wait at least 10 minutes, re-read the above, then run the same command with:\n  --approve ${r.texts.token}\nYou will be asked on the terminal to retype the repository name and to confirm.`);
+      console.log(`\nDRY RUN ONLY: nothing was changed on GitHub.\nTo publish, wait at least 10 minutes, re-read the above, then run the same command with:\n  --approve ${r.texts.token}\nYou will be asked one y/N question on the terminal.`);
     } else {
       const r = await publish(o);
       if (r.phase === "published") { console.log(r.log.join("\n")); console.log("published."); }

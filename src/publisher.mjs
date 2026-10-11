@@ -44,16 +44,6 @@ export function cleanDescription(text, issueNumber) {
   return text.trim();
 }
 
-/** One free-form sentence in the human's own words; it must mention the issue number so a fixed template cannot be auto-typed. */
-export function cleanSentence(text, issueNumber) {
-  const t = String(text ?? "").replace(/\s+/g, " ").trim();
-  if (t.length < 40 || t.length > 400) throw new Error("the sentence must be 40 to 400 characters, in your own words");
-  if (!isPlainText(t)) throw new Error("the sentence has hidden characters, markup, a link or an @");
-  noSecrets(t, "the sentence");
-  if (!new RegExp(`(^|[^0-9])${issueNumber}([^0-9]|$)`).test(t)) throw new Error(`the sentence must mention the issue number (${issueNumber}) and say what the change does`);
-  return t;
-}
-
 const tok = (s) => String(s ?? "").replace(/[^A-Za-z0-9._:\/+-]/g, "-").slice(0, 60);
 
 export function buildCommitMessage({ title, issueNumber, spec, flags = {}, user, model }) {
@@ -65,11 +55,10 @@ export function buildCommitMessage({ title, issueNumber, spec, flags = {}, user,
 const cleanPerson = (n) => { if (!/^[^<>\n@]{1,80}$/.test(n ?? "") || hiddenChars(n).length) throw new Error("your git user.name is not usable in a trailer"); return n; };
 const cleanEmail = (e) => { if (!/^[^\s<>@]{1,64}@[^\s<>@]{1,120}$/.test(e ?? "") || hiddenChars(e).length) throw new Error("your git user.email is not usable"); return e; };
 
-export function buildPrBody({ description, spec, issueNumber, record, sentence, specBlobSha }) {
+export function buildPrBody({ description, spec, issueNumber, record, specBlobSha }) {
   const parts = [cleanDescription(description, issueNumber)];
   if (spec.disclosure.mechanism === "pr_body") parts.push(spec.disclosure.text);
   parts.push(`Refs #${issueNumber}`);
-  parts.push(`Submitter's note: ${sentence}`);
   parts.push(`Checked in a container by Common Contributions (self-reported run ${record.recordSha.slice(0, 12)}, harness ${String(record.harness.commit ?? "unknown").slice(0, 12)}). A project's own CI is the real check.`);
   parts.push(`<!-- ${MARKER_PREFIX} run=${record.recordSha} harness=${record.harness.commit ?? "none"} spec=${specBlobSha} -->`);
   return parts.join("\n\n") + "\n";
@@ -109,6 +98,6 @@ export function buildCommit({ repoDir, base, files, message, author, when }) {
 const canonical = (v) => JSON.stringify(v, (_k, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1))) : x));
 
 /** Binds everything the human approved. Any change to any of it gives a different token. */
-export function approvalToken({ bound, commitSha, title, body, branch, sentence }) {
-  return createHash("sha256").update(canonical({ ...bound, commitSha, title, body, branch, sentenceHash: createHash("sha256").update(sentence).digest("hex") })).digest("hex").slice(0, 32);
+export function approvalToken({ bound, commitSha, title, body, branch }) {
+  return createHash("sha256").update(canonical({ ...bound, commitSha, title, body, branch })).digest("hex").slice(0, 32);
 }

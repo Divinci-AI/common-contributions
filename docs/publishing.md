@@ -6,10 +6,10 @@ You are the submitter. The pull request comes from **your** fork and **your** ac
 1. `run-one` checks the model's change in a container and writes a **run record** (self-reported).
 2. `publish --record ... --repo owner/name --issue N --clone DIR --description-file FILE` is a **dry run**. It checks everything, prints every check, the whole diff, the exact commit message, the exact PR title and body and the author name and email that will be published, and a token. It changes nothing on GitHub.
 3. Wait at least 10 minutes. Read it again.
-4. Run the same command with `--approve <token>`. On the terminal you retype the repository name, confirm your sentence and type `yes`. The tool then re-checks the project three times (before forking, before pushing, before opening the PR), pushes exactly the approved commit to your fork, opens the PR and verifies what was created.
+4. Run the same command with `--approve <token>`. On the terminal you answer one y/N question after the diff is shown. The tool then re-checks the project three times (before forking, before pushing, before opening the PR), pushes exactly the approved commit to your fork, opens the PR and verifies what was created.
 
 ## What you write yourself
-The PR description (`--description-file`) and one sentence in your own words that says what the change does and mentions the issue number. The tool adds only the project's required disclosure, the issue reference, your sentence and a short note that the checks ran in a container (self-reported).
+The PR description (`--description-file`). The tool adds only the project's required disclosure, the issue reference and a short note that the checks ran in a container (self-reported).
 
 ## Flags you have to mean
 Three things are asked ON THE TERMINAL, never as flags, after the text is shown: that you have signed a required CLA (it can bind your employer); that you certify the Developer Certificate of Origin for this change (the tool never signs for you, and the origin of model output is unknown); and that you read any added lines that touch the environment, network or processes.

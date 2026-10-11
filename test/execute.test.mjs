@@ -12,7 +12,6 @@ import { defaultWorld, fakeRunner } from "./fakegh.mjs";
 const KEY = "k".repeat(64), TREE = "t".repeat(64);
 const SPEC = { version: 1, opt_in: true, contact: "@maintainer", policy_url: "https://example.org/ai", review_by: "2027-04-01", label_applied_by: ["maintainer"], first_time_contributors: "allowed", allowed_paths: ["tests/**"], disclosure: { mechanism: "pr_body", text: "AI assistance: yes" }, certification: { dco: "none", cla: "none" } };
 const USER = { login: "alice", id: 21, name: "Alice Example", email: "alice@example.org" };
-const SENTENCE = "I read every line of the change for issue 7: it adds one test for the empty list case.";
 const DESC = "I added a test for the empty list case because the helper had none.";
 
 function scene({ spec = SPEC, world: wmod } = {}) {
@@ -25,11 +24,11 @@ function scene({ spec = SPEC, world: wmod } = {}) {
   wmod?.(w);
   const record = buildRecord({ harness: { commit: "h".repeat(40), dirty: false, srcTreeHash: TREE }, project: { dir: "r" }, origin: "github.com/acme/widgets", issue: { number: 7, sha256: issueHash(w.issue.title, w.issue.body) }, model: "claude-code:opus", base, source: "git-archive", container: true, pin: { escapeSuite: { pass: 15, fail: 0, skipped: 0 } }, image: "sha256:x", dep: { matched: true }, limits: {}, files: { "tests/new.test.ts": "export {}\n" }, checks: [{ name: "t", status: 0 }], key: KEY });
   const state = tmp();
-  const common = { gh: createGh(fakeRunner(w)), write: ghWriter(fakeRunner(w)), record, key: KEY, reviewedTrees: [TREE], target: "acme/widgets", issueNumber: 7, user: USER, repoDir: dir, ledger: [], flags: {}, descriptionText: DESC, sentence: SENTENCE, pendingDir: join(state, "pending"), ledgerFile: join(state, "published.jsonl"), pushUrlFor: () => bare, sleep: async () => {}, now: Date.now() + 60e3 };
+  const common = { gh: createGh(fakeRunner(w)), write: ghWriter(fakeRunner(w)), record, key: KEY, reviewedTrees: [TREE], target: "acme/widgets", issueNumber: 7, user: USER, repoDir: dir, ledger: [], flags: {}, descriptionText: DESC, pendingDir: join(state, "pending"), ledgerFile: join(state, "published.jsonl"), pushUrlFor: () => bare, sleep: async () => {}, now: Date.now() + 60e3 };
   return { w, dir, bare, state, common, g };
 }
 const answers = (...a) => { const q = [...a]; return () => q.shift(); };
-const GOOD = (repo = "acme/widgets") => answers(repo, "", "yes");
+const GOOD = () => answers("y");
 
 test("dry run: plans, builds the exact commit and texts, prints a token, and writes NOTHING to GitHub or the remote", () => {
   const s = scene();
@@ -66,9 +65,9 @@ const refusals = {
   "no token": [() => ({ approve: undefined }), /token does not match/],
   "no dry run on record": [(s, d) => { for (const f of readdirSync(s.common.pendingDir)) spawnSync("/bin/rm", [join(s.common.pendingDir, f)]); return {}; }, /no dry run/],
   "the cool-down has not passed": [(s) => ({ now: s.common.now + 1000 }), /wait \d+ more minute/],
-  "the repository name typed wrong": [() => ({ ask: answers("acme/other", "", "yes") }), /repository name/],
-  "the sentence retyped differently": [() => ({ ask: answers("acme/widgets", "I read a completely different thing for issue 7 and it does something else.", "yes") }), /sentence differs/],
-  "not confirmed": [() => ({ ask: answers("acme/widgets", "", "no") }), /not confirmed/],
+  "not confirmed (n)": [() => ({ ask: answers("n") }), /not confirmed/],
+  "not confirmed (Enter)": [() => ({ ask: answers("") }), /not confirmed/],
+  "not confirmed (yes please)": [() => ({ ask: answers("yes please") }), /not confirmed/],
 };
 for (const [name, [fn, re]] of Object.entries(refusals)) {
   test(`real publish refused: ${name}; nothing is written`, async () => {
@@ -116,16 +115,15 @@ test("a PR that comes back with a different head, title or body is closed and re
     assert.equal(r.phase, "aborted"); assert.match(r.error, /it was closed/); assert.equal(s.w.prClosed, true); assert.equal(readLedger(s.common.ledgerFile).length, 0);
   }
 });
-test("a missing human description or a sentence without the issue number stops at the dry run", () => {
+test("a missing human description stops at the dry run", () => {
   const s = scene();
   assert.equal(dryRun({ ...s.common, descriptionText: "" }).phase, "refused");
-  assert.equal(dryRun({ ...s.common, sentence: "I read it all and it is fine and good and tidy and short." }).phase, "refused");
   assert.equal(s.w.writes.length, 0);
 });
 
 test("the state changes while the human is typing the confirmations: caught before the fork", async () => {
   const s = scene(); const d = dryRun(s.common);
-  let n = 0; const ask = (q) => { if (++n === 1) s.w.optin = { content: JSON.stringify({ ...SPEC, paused: true }) }; return [s.common.target, "", "yes"][n - 1]; };
+  let n = 0; const ask = (q) => { if (++n === 1) s.w.optin = { content: JSON.stringify({ ...SPEC, paused: true }) }; return "y"; };
   const r = await publish({ ...s.common, approve: d.texts.token, ask, now: s.common.now + COOLDOWN_MS + 1000 });
   assert.equal(r.phase, "aborted"); assert.match(r.error, /before forking/); assert.equal(s.w.writes.length, 0);
 });
@@ -170,4 +168,13 @@ test("certifications are asked AFTER the review text is shown, and a plan that f
   const yes = dryRun({ ...s.common, flags: { claSigned: true, certifyDco: true } }), no = dryRun({ ...s.common, flags: { claSigned: false, certifyDco: true } });
   assert.equal(yes.phase, "dry-run"); assert.equal(no.phase, "refused");
   assert.notEqual(yes.texts.token, dryRun({ ...s.common, flags: { claSigned: true, certifyDco: true }, descriptionText: DESC + " Again." }).texts.token);
+});
+
+test("certification answers given as a callback reach the commit: Signed-off-by is in the commit that is published", () => {
+  const s = scene({ spec: { ...SPEC, certification: { dco: "signed-off-by", cla: "none" } } });
+  const d = dryRun({ ...s.common, flags: () => ({ certifyDco: true }) });
+  assert.equal(d.phase, "dry-run");
+  assert.match(d.texts.message, /^Signed-off-by: Alice Example <alice@example\.org>$/m);
+  const n = dryRun({ ...s.common, flags: { certifyDco: true } });
+  assert.equal(n.texts.commitSha, d.texts.commitSha, "callback and plain object give the same commit");
 });

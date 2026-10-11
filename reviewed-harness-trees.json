@@ -1,0 +1,4 @@
+{
+  "note": "Hashes of src/ (computed by the harness itself) that were reviewed and released. The publisher refuses a run record made by any other src/. This is a CONSISTENCY check against dev builds and edited copies, not security: a modified harness can skip it. Add a hash with `node scripts/record-tree-hash.mjs` at release time.",
+  "trees": []
+}

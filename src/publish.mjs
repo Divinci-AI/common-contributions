@@ -167,7 +167,7 @@ export function planPublish(o) {
   if (spec.certification.cla !== "none") add("CLA acknowledged", flags.claSigned === true, `this project requires a ${spec.certification.cla} CLA; pass --cla-signed once YOU have signed it (it can bind your employer)`);
   if (spec.certification.dco === "signed-off-by") add("DCO certification given", flags.certifyDco === true, "this project requires a Signed-off-by line; pass --certify-dco only if YOU can certify the Developer Certificate of Origin for this change");
 
-  return result({ spec, diff, bound: { repoId: repo.id, ownerId: repo.ownerId, fullName: repo.fullName, defaultBranch: repo.defaultBranch, base: record.base, head, specBlobSha: f.blobSha, specCommit: lc?.sha ?? null, recordSha: record.recordSha, issueNumber, user: { login: user.login, id: user.id, name: user.name, email: user.email } } });
+  return result({ spec, diff, issueTitle: issue.title, bound: { repoId: repo.id, ownerId: repo.ownerId, fullName: repo.fullName, defaultBranch: repo.defaultBranch, base: record.base, head, specBlobSha: f.blobSha, specCommit: lc?.sha ?? null, recordSha: record.recordSha, issueNumber, user: { login: user.login, id: user.id, name: user.name, email: user.email } } });
 }
 
 export { isPlainText };

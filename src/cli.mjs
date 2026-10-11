@@ -36,6 +36,9 @@ import { buildRecord, verifyRecord, harnessIdentity, issueHash, loadOrCreateKey 
 import { loadPin, qualifyRuntime, parseTap } from "./pin.mjs";
 import { cleanup } from "./hygiene.mjs";
 import { parseOptIn } from "./optin.mjs";
+import { createGh, ghRunner } from "./ghclient.mjs";
+import { dryRun, publish, ghWriter, readLedger } from "./execute.mjs";
+import { ttyAsk, escapeForTerminal } from "./tty.mjs";
 import { fileURLToPath } from "node:url";
 import { mkdirSync } from "node:fs";
 import { randomBytes } from "node:crypto";
@@ -280,6 +283,48 @@ if (cmd === "status") {
   const r = parseOptIn(readFileSync(rest[0]));
   if (!r.ok) { console.error(`refused:\n  ${r.errors.join("\n  ")}`); process.exit(2); }
   console.log(`valid (tasks need the "${r.value.task_label}" label applied by ${r.value.label_applied_by.join(", ")}; at most ${r.value.max_open_agent_prs} open PR(s), ${r.value.max_diff_lines} changed lines; ${r.value.paused ? "PAUSED" : "not paused"}; review by ${r.value.review_by})`);
+} else if (cmd === "publish") {
+  // Dry run unless --approve <token>. Reads GitHub through YOUR gh; confirmations come from /dev/tty.
+  const flag = (n) => { const i = rest.indexOf(n); return i === -1 ? undefined : rest[i + 1]; };
+  const need = (n) => { const v = flag(n); if (!v) { console.error(`usage: publish --record <run-record.json> --repo owner/name --issue N --clone <dir> --description-file <file> [--approve <token>] [--title T] [--gh /abs/gh] [--cla-signed] [--certify-dco] [--allow-flagged-code]`); process.exit(2); } return v; };
+  const recordFile = need("--record"), target = need("--repo"), issueNumber = Number(need("--issue")), clone = need("--clone"), descFile = need("--description-file");
+  const harnessDir = fileURLToPath(new URL("..", import.meta.url));
+  const ghPath = flag("--gh") ?? spawnSync("/usr/bin/which", ["gh"], { encoding: "utf8" }).stdout.trim();
+  try {
+    if (!Number.isInteger(issueNumber) || issueNumber < 1) throw new Error("--issue must be a number");
+    const key = loadOrCreateKey(stateDir, { create: false });
+    if (!key) throw new Error(`no install key at ${stateDir}: run-one on this machine creates it; a record from elsewhere cannot be published here`);
+    const runner = ghRunner(ghPath);
+    const gh = createGh(runner);
+    const me = gh.get("/user");
+    const gitCfg = (k) => spawnSync("/usr/bin/git", ["-C", clone, "config", "--get", k], { env: { PATH: "/usr/bin:/bin", HOME: process.env.HOME ?? "" }, encoding: "utf8" }).stdout.trim();
+    const user = { login: me.login, id: me.id, name: gitCfg("user.name"), email: gitCfg("user.email") };
+    if (!user.name || !user.email) throw new Error("set git user.name and user.email in the clone: they are published in the commit");
+    const reviewedTrees = JSON.parse(readFileSync(join(harnessDir, "reviewed-harness-trees.json"), "utf8")).trees;
+    const sentence = ttyAsk(`Your own words, one sentence ("I read every line and can answer review without the model", and what the change does; mention issue ${issueNumber}):\n> `);
+    const ledgerFile = join(stateDir, "published.jsonl");
+    const o = {
+      gh, write: ghWriter(runner), record: JSON.parse(readFileSync(recordFile, "utf8")), key, reviewedTrees, target, issueNumber, user, repoDir: clone,
+      ledger: readLedger(ledgerFile), flags: { claSigned: rest.includes("--cla-signed"), certifyDco: rest.includes("--certify-dco"), allowFlaggedCode: rest.includes("--allow-flagged-code") },
+      descriptionText: readFileSync(descFile, "utf8"), sentence, titleOverride: flag("--title"), pendingDir: join(stateDir, "publish-pending"), ledgerFile,
+      pushUrlFor: (fork) => `https://github.com/${fork}.git`, ask: ttyAsk, approve: flag("--approve"),
+    };
+    const show = (r) => {
+      for (const c of r.plan.checks) console.log(`${c.ok ? "ok  " : "FAIL"} ${c.name}${c.ok ? "" : ": " + escapeForTerminal(c.detail)}`);
+      for (const w of r.plan.warnings ?? []) console.log(`warn ${escapeForTerminal(w)}`);
+    };
+    if (!o.approve) {
+      const r = dryRun(o);
+      show(r);
+      if (r.phase !== "dry-run") { console.error("\nrefused: nothing was changed."); process.exit(2); }
+      console.log(`\n--- diff (${r.plan.diff.total} changed lines) ---\n${escapeForTerminal(r.plan.diff.patch)}\n--- commit message ---\n${escapeForTerminal(r.texts.message)}\n--- PR title ---\n${escapeForTerminal(r.texts.title)}\n--- PR body ---\n${escapeForTerminal(r.texts.body)}\n--- author published in the commit: ${escapeForTerminal(user.name)} <${escapeForTerminal(user.email)}> ---`);
+      console.log(`\nDRY RUN ONLY: nothing was changed on GitHub.\nTo publish, wait at least 10 minutes, re-read the above, then run the same command with:\n  --approve ${r.texts.token}\nYou will be asked on the terminal to retype the repository name and to confirm.`);
+    } else {
+      const r = await publish(o);
+      if (r.phase === "published") { console.log(r.log.join("\n")); console.log("published."); }
+      else { show(r); console.error(r.error ? `\naborted: ${r.error}\n${(r.log ?? []).join("\n")}` : "\nrefused: nothing was changed."); process.exit(2); }
+    }
+  } catch (e) { console.error(`publish: ${e instanceof Error ? e.message : String(e)}`); process.exit(2); }
 } else if (cmd === "cleanup") {
   const r = cleanup({ docker: dockerPath(rest), images: rest.includes("--images") });
   console.log(JSON.stringify(r));
@@ -315,6 +360,6 @@ if (cmd === "status") {
   try { out = runMutations({ root, sourcePath: source, mutations: JSON.parse(readFileSync(file, "utf8")), runTest }); } finally { if (copy) rmTree(copy, { recursive: true, force: true }); }
   console.warn(JSON.stringify(out, null, 2));
 } else {
-  console.error("usage: status | stop [reason] | clear-stop --yes | dry-run <issues.json> | run-one ... | build-deps ... | pin-runtime ... | verify-record ... | optin-check ... | cleanup ... | coverage ... | mutate ...");
+  console.error("usage: status | stop [reason] | clear-stop --yes | dry-run <issues.json> | run-one ... | build-deps ... | pin-runtime ... | verify-record ... | optin-check ... | publish ... | cleanup ... | coverage ... | mutate ...");
   process.exit(2);
 }

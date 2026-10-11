@@ -16,6 +16,7 @@ export function defaultWorld() {
     searchTotal: 0,
     closedIssuesByCreator: {},
     fail: {}, // path substring -> http status
+    writes: [], forkName: "alice/widgets", forkCreated: false, pushedSha: null, prCreated: null, prClosed: false,
   };
 }
 
@@ -23,9 +24,24 @@ export function fakeRunner(world) {
   const ok = (v) => ({ status: 0, stdout: JSON.stringify(v), stderr: "" });
   const err = (code) => ({ status: 1, stdout: "", stderr: `gh: ${code === 404 ? "Not Found" : "error"} (HTTP ${code})` });
   const page = (arr, url) => { const m = /[?&]page=(\d+)/.exec(url); const p = m ? Number(m[1]) : 1; return arr.slice((p - 1) * 100, p * 100); };
+  const fields = (args) => Object.fromEntries(args.flatMap((a, i) => (args[i - 1] === "-f" ? [[a.slice(0, a.indexOf("=")), a.slice(a.indexOf("=") + 1)]] : [])));
   return (args) => {
     const path = args.filter((a) => a.startsWith("/") || a === "graphql").pop() ?? "";
     world.calls.push(args.join(" "));
+    const method = args[args.indexOf("-X") + 1];
+    if (args.includes("-X")) {
+      world.writes.push({ method, path, fields: fields(args) });
+      for (const [k, code] of Object.entries(world.fail)) if (path.includes(k)) return err(code);
+      if (method === "POST" && path === `/repositories/${world.repo.id}/forks`) { world.forkCreated = true; world.onFork?.(); return ok({ full_name: world.forkName }); }
+      if (method === "POST" && path === `/repositories/${world.repo.id}/pulls`) {
+        const f = fields(args);
+        const sha = world.prHeadSha ?? world.pushedSha?.() ?? "0".repeat(40);
+        world.prCreated = { number: 55, html_url: "https://github.com/acme/widgets/pull/55", state: world.prState ?? "open", title: world.prTitle ?? f.title, body: world.prBody ?? f.body, head: { sha } };
+        return ok(world.prCreated);
+      }
+      if (method === "PATCH" && path.startsWith(`/repositories/${world.repo.id}/pulls/`)) { world.prClosed = true; return ok({ state: "closed" }); }
+      return err(404);
+    }
     for (const [k, code] of Object.entries(world.fail)) if (path.includes(k)) return err(code);
     if (args[1] === "graphql") return ok({ data: { repository: { issue: { lastEditedAt: world.lastEditedAt } } } });
     const r = world.repo;
@@ -43,6 +59,9 @@ export function fakeRunner(world) {
     if (path.startsWith(`/repositories/${r.id}/issues/${world.issue.number}`)) return ok(world.issue);
     if (path.startsWith(`/repositories/${r.id}/pulls`)) return ok(page(world.pulls, path));
     if (path.startsWith(`/repositories/${r.id}/issues?`)) { const login = /creator=([^&]+)/.exec(path)?.[1]; return ok(page(world.closedIssuesByCreator[decodeURIComponent(login)] ?? [], path)); }
+    if (path === `/repos/${world.forkName}`) return world.forkCreated ? ok({ full_name: world.forkName, fork: world.forkFlag ?? true, source: { id: world.forkSourceId ?? r.id }, owner: { login: world.forkOwner ?? world.forkName.split("/")[0] } }) : err(404);
+    if (path.startsWith(`/repos/${world.forkName}/git/ref/heads/`)) { const sha = world.refSha ?? world.pushedSha?.(); world.onRef?.(); return sha ? ok({ object: { sha } }) : err(404); }
+    if (path === "/user") return ok({ login: "alice", id: 21 });
     if (path.startsWith("/search/issues")) return ok({ total_count: world.searchTotal });
     return err(404);
   };

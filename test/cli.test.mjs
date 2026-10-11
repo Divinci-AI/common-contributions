@@ -353,3 +353,11 @@ test("optin-check: a valid file is described, an invalid one is refused with rea
   const ok = await cli(["optin-check", f], tmp()); assert.equal(ok.status, 0, ok.stderr); assert.match(ok.stdout, /valid/);
   const no = await cli(["optin-check", g], tmp()); assert.equal(no.status, 2); assert.match(no.stderr, /duplicate key/);
 });
+
+test("publish: refuses without the pieces it needs, and never prompts or contacts GitHub on a bad invocation", async () => {
+  const r = await cli(["publish", "--repo", "acme/widgets"], tmp());
+  assert.equal(r.status, 2); assert.match(r.stderr, /usage: publish/);
+  const dir = tmp(), rec = join(dir, "r.json"); writeFileSync(rec, "{}"); writeFileSync(join(dir, "d.md"), "x");
+  const r2 = await cli(["publish", "--record", rec, "--repo", "acme/widgets", "--issue", "7", "--clone", dir, "--description-file", join(dir, "d.md")], tmp());
+  assert.equal(r2.status, 2); assert.match(r2.stderr, /no install key/);
+});

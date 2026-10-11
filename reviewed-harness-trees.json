@@ -1,4 +1,14 @@
 {
   "note": "Hashes of src/ (computed by the harness itself) that were reviewed and released. The publisher refuses a run record made by any other src/. This is a CONSISTENCY check against dev builds and edited copies, not security: a modified harness can skip it. Add a hash with `node scripts/record-tree-hash.mjs` at release time.",
-  "trees": []
+  "trees": [
+    "bcb7175ea94bae482784438fc9276fe197d9ff655eeb93a164c4ccd93c17cfba"
+  ],
+  "released": [
+    {
+      "srcTreeHash": "bcb7175ea94bae482784438fc9276fe197d9ff655eeb93a164c4ccd93c17cfba",
+      "commit": "a6997c21fd91dcdc37f2ca31d971960d6431e50f",
+      "date": "2026-10-11",
+      "reviewed_by": "Opus 5.5 and Hermes (design and code reviews), then fixes"
+    }
+  ]
 }

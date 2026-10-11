@@ -49,3 +49,29 @@ test("the homepage does not claim to have built what status.json says is not bui
   assert.ok(notBuilt.length > 0);
   assert.ok(/Not built/.test(home) && /installer/i.test(home), "the 'where we are' card lists what is not built");
 });
+
+const piece = (name) => rows.find((r) => r.piece === name);
+
+test("llms.txt, agent.json and the machine note agree with status.json about the hosted model adapter", () => {
+  const hosted = piece("Hosted model, capped API key");
+  assert.ok(hosted, "row exists");
+  const llms = read("site/llms.txt");
+  const [exists, doesNot = ""] = llms.split(/^## What does not exist$/m);
+  const agent = JSON.parse(read("site/agent.json"));
+  const note = read("site/harness/index.html").match(/what_does_not: .*/)?.[0] ?? "";
+  const claimsNotBuilt = [doesNot, agent.does_not_exist.join(" "), note].some((t) => /hosted/i.test(t));
+  assert.equal(claimsNotBuilt, hosted.status === "not-built", "a surface lists the hosted adapter on the wrong side of status.json");
+  assert.equal(/hosted/i.test(exists) || agent.exists.some((e) => /hosted/i.test(e)), hosted.status !== "not-built");
+});
+
+test("no page or README hard-codes a test count (it drifts; the suite is the evidence)", () => {
+  for (const f of ["README.md", "site/index.html", "site/harness/index.html", "site/report/index.html", "site/llms.txt"]) {
+    assert.ok(!/\b\d{2,4} tests\b/i.test(read(f)), `${f} hard-codes a test count`);
+  }
+});
+
+test("the egress wording does not claim more than the check does", () => {
+  for (const f of ["site/harness/index.html", "site/panel.js"]) {
+    assert.ok(!/Only the model endpoint and git are reachable/.test(read(f)), `${f} says the network is restricted, but only the harness's own requests are checked`);
+  }
+});

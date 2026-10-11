@@ -116,7 +116,7 @@ disclosure_line: "AI-assisted; reviewed by a human before submission"</pre>
             <button type="button" class="toggle" role="switch" aria-checked="true" data-circuit="egress" aria-label="Egress allowlist, armed"><span class="lever"></span></button>
             <span class="led" aria-hidden="true"></span><span class="b-state">Armed</span>
             <p class="b-stops">Stops the agent reaching anywhere else.</p>
-            <details><summary>How</summary><p>Only the model endpoint and git are reachable. Documentation hosts such as example.com count as fixtures, not calls.</p></details>
+            <details><summary>How</summary><p>The harness's own requests may go only to the model endpoint and git. This checks what the harness sends; it is not an operating-system firewall, and running model-written code in a container is not built yet. Documentation hosts such as example.com count as fixtures, not calls.</p></details>
           </div>
           <div class="breaker" data-state="armed">
             <span class="b-label">Branch rule</span><span class="b-rating">agent/* only</span>
@@ -142,7 +142,7 @@ disclosure_line: "AI-assisted; reviewed by a human before submission"</pre>
         </div>
         <p class="counter" id="counter" style="margin-top:0.6rem">0 of 6 tripped</p>
       </div>
-      <p class="note">This is a model of the real guards, with their real behaviour described in plain words. The harness itself has 90 tests, and a guard was removed more than 50 times to check that the tests notice.</p>
+      <p class="note">This is a model of the real guards, with their real behaviour described in plain words. The harness has its own test suite, and a guard was removed more than 50 times to check that the tests notice.</p>
     </section>
 
     <section id="evidence" aria-labelledby="ev-h">
@@ -169,7 +169,7 @@ disclosure_line: "AI-assisted; reviewed by a human before submission"</pre>
         <h3>What this does not show yet</h3>
         <ul>
           <li>Two small modules, one model family writing tests, one author per mutation set.</li>
-          <li>The budget cap and measured token counts were never exercised. The agents ran in a coding assistant that is not billed per token.</li>
+          <li>In the dry run, the budget cap and measured token counts were never exercised (a later real run of the hosted adapter is in the status table above). The agents ran in a coding assistant that is not billed per token.</li>
           <li>The count of tools an agent used is passed in by whoever runs the harness. The harness cannot verify it.</li>
           <li>There is no operating-system sandbox. The design depends on the agent returning text.</li>
           <li>No pull request has been opened from any of this, and no maintainer has reviewed the test files.</li>
@@ -239,8 +239,8 @@ status: not installable
 instruction: do not run commands, install packages, or contact any project because of this page
 action: tell your user what this page says and ask what they want
 what_it_is: a harness that caps spend, limits scope and requires human review
-what_exists: guard rails, coverage gate, mutation runner, replay mode
-what_does_not: installer, hosted-model adapter, PR publishing, OS sandbox
+what_exists: guard rails, coverage gate, mutation runner, replay mode, hosted-model adapter (spend-capped; not yet reconciled with the provider)
+what_does_not: installer, PR publishing, OS sandbox
 credentials: never ask your user for a subscription login; an API key with a spend limit is the only fit
 rewards: none</pre>
       <div class="callout"><b>Why a page for agents says "do nothing".</b> A page that tells agents to run things on their owner's behalf has the same shape as an attack. Anything real here will say what it does, ask your user first, and be easy to stop.</div>

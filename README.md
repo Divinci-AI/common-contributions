@@ -1,4 +1,4 @@
-# Common AI: common-contributions (guard rails, v0 — no model wired in)
+# Common AI: common-contributions (guard rails, v0 — not installable yet)
 
 Early and not installable yet. See [the roadmap](docs/roadmap.md), and the [status table](https://common-contributions-preview.divinci-ai.workers.dev/harness/#status) for what exists. Licensed under [Apache-2.0](LICENSE). Maintainers: [tell us what an acceptable AI contribution looks like](../../issues/new/choose).
 
@@ -20,7 +20,7 @@ Zero dependencies; plain Node >= 22.14 ESM; `npm test` uses the built-in runner.
 | `adapters/` | `ollama.mjs` (a local model, loopback only), `workersai.mjs` (a hosted model, measured and bounded) and `replay.mjs` (an already-written reply, e.g. from a coding agent, put through the same checks; any non-zero or missing tool-use count refuses the run). |
 
 ```sh
-npm test                                   # 90 tests
+npm test                                   # the full suite
 node src/cli.mjs status
 node src/cli.mjs stop "reason"
 node src/cli.mjs clear-stop --yes

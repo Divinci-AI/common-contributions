@@ -40,7 +40,7 @@ export const CIRCUITS = [
     rating: "model + git",
     stops: "The agent reaching anywhere else.",
     event: "Network call refused. The host is not on the allowlist. The run stopped.",
-    how: "Only the model endpoint and git are reachable. Documentation hosts such as example.com count as fixtures, not calls.",
+    how: "The harness's own requests may go only to the model endpoint and git. This checks what the harness sends; it is not an operating-system firewall. Documentation hosts such as example.com count as fixtures, not calls.",
   },
   {
     id: "branch",

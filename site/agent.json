@@ -9,11 +9,11 @@
     "guard-rails",
     "coverage-gate",
     "mutation-runner",
-    "replay-mode"
+    "replay-mode",
+    "hosted-model-adapter"
   ],
   "does_not_exist": [
     "installer",
-    "hosted-model-adapter",
     "pr-publishing",
     "os-sandbox"
   ],

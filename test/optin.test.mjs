@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseOptIn, parseStrictJson, validateOptIn, isPrintable, isPlainText, validGlob, globMatch, cleanHttpsUrl, MAX_BYTES } from "../src/optin.mjs";
+import { readFileSync } from "node:fs";
+import { OPTIN_KEYS, parseOptIn, parseStrictJson, validateOptIn, isPrintable, isPlainText, validGlob, globMatch, cleanHttpsUrl, MAX_BYTES } from "../src/optin.mjs";
 
 const NOW = Date.parse("2026-10-11T12:00:00Z");
 const good = () => ({
@@ -120,4 +121,11 @@ test("cleanHttpsUrl and text helpers", () => {
 test("validateOptIn is pure data in, verdict out: it never executes or fetches anything", () => {
   const o = good(); o.policy_url = "https://example.org/p"; const before = JSON.stringify(o);
   validateOptIn(o, { now: NOW }); assert.equal(JSON.stringify(o), before);
+});
+
+test("the spec document lists exactly the keys the validator accepts (no drift)", () => {
+  const doc = readFileSync(new URL("../docs/opt-in-spec.md", import.meta.url), "utf8");
+  const table = doc.split("## Fields")[1].split("## What the tool will never do")[0];
+  const documented = [...table.matchAll(/^\| `([a-z_]+)`(?: \/ `([a-z_]+)`)? \|/gm)].flatMap((m) => [m[1], m[2]]).filter(Boolean).sort();
+  assert.deepEqual(documented, [...OPTIN_KEYS].sort());
 });

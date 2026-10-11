@@ -149,7 +149,7 @@ export function globMatch(pattern, path) {
 
 const LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const CONTACT = /^(?:@[A-Za-z0-9-]{1,39}|[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,120}\.[A-Za-z]{2,24})$/;
-const KEYS = ["version", "opt_in", "contact", "policy_url", "review_by", "paused", "task_label", "label_applied_by", "label_blocklist", "claim_required", "first_time_contributors", "max_open_agent_prs", "max_diff_lines", "allowed_paths", "forbidden_paths", "safety_critical", "safety_reason", "changelog", "disclosure", "certification"];
+export const OPTIN_KEYS = ["version", "opt_in", "contact", "policy_url", "review_by", "paused", "task_label", "label_applied_by", "label_blocklist", "claim_required", "first_time_contributors", "max_open_agent_prs", "max_diff_lines", "allowed_paths", "forbidden_paths", "safety_critical", "safety_reason", "changelog", "disclosure", "certification"];
 const REQUIRED = ["version", "opt_in", "contact", "policy_url", "review_by", "label_applied_by", "disclosure", "certification"];
 const DAY = 24 * 3600 * 1000;
 
@@ -167,7 +167,7 @@ export function cleanHttpsUrl(v) {
 export function validateOptIn(o, { now = Date.now() } = {}) {
   const e = [];
   if (!o || typeof o !== "object" || Array.isArray(o)) return { ok: false, errors: ["not an object"] };
-  for (const k of Object.keys(o)) if (!KEYS.includes(k)) e.push(`unknown key: ${k.slice(0, 40)}`);
+  for (const k of Object.keys(o)) if (!OPTIN_KEYS.includes(k)) e.push(`unknown key: ${k.slice(0, 40)}`);
   for (const k of REQUIRED) if (!(k in o)) e.push(`missing key: ${k}`);
   const int = (k, lo, hi) => { if (!Number.isInteger(o[k]) || o[k] < lo || o[k] > hi) { e.push(`${k}: integer ${lo} to ${hi}`); return undefined; } return o[k]; };
   const bool = (k, d) => { if (!(k in o)) return d; if (typeof o[k] !== "boolean") { e.push(`${k}: true or false`); return d; } return o[k]; };

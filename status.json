@@ -75,8 +75,14 @@
     },
     {
       "piece": "Maintainer opt-in file",
-      "status": "designed",
-      "detail": "Opt-in is by issue label and scope for now."
+      "status": "partly-built",
+      "detail": "The file format, a strict parser and a checker for maintainers are built and tested (<code>optin-check</code>). No project has adopted it.",
+      "modules": [
+        "src/optin.mjs"
+      ],
+      "tests": [
+        "test/optin.test.mjs"
+      ]
     },
     {
       "piece": "Hosted model, capped API key",
@@ -91,8 +97,20 @@
     },
     {
       "piece": "Pull request publishing",
-      "status": "not-built",
-      "detail": "Only the publish gate exists. No PR has been opened."
+      "status": "partly-built",
+      "detail": "A dry run and a publisher that opens a pull request only from the submitter's own fork, after they confirm on their terminal, are built and tested against a fake GitHub only. They have never run against GitHub, and no pull request has been opened.",
+      "modules": [
+        "src/publish.mjs",
+        "src/execute.mjs",
+        "src/publisher.mjs",
+        "src/ghclient.mjs"
+      ],
+      "tests": [
+        "test/publish.test.mjs",
+        "test/execute.test.mjs",
+        "test/publisher.test.mjs",
+        "test/ghclient.test.mjs"
+      ]
     },
     {
       "piece": "Container verifier",

@@ -46,3 +46,8 @@ State: `$COMMON_CONTRIBUTIONS_HOME` (default `~/.local/state/common-ai`, or `$XD
 - Mutation-tested (40+ guard removals, all caught) — that shows the tests pin the guards, not that the guards are
   sufficient against a determined attacker. A first real run also taught that a mutation score is a floor, not a gate:
   a test file tuned against one mutation set fell from 86% to 50% on a held-out set written by a different author.
+
+## Opting a project in, and publishing
+- Maintainers: [`docs/opt-in-spec.md`](docs/opt-in-spec.md) (the opt-in file; check yours with `optin-check`).
+- Submitters: [`docs/publishing.md`](docs/publishing.md) (dry run first; you are the submitter).
+- Reporting a problem or a pull request you did not want: [`SECURITY.md`](SECURITY.md).

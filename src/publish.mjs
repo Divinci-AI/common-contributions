@@ -163,6 +163,16 @@ export function planPublish(o) {
   add("not already published here in the last 24 hours", !recent.some((l) => l.repoId === repo.id), "your ledger shows a publish to this project in the last 24 hours");
   add("under the daily limit across projects", recent.length < TOOL_MAX_PER_DAY, `${recent.length} publishes in the last 24 hours, limit ${TOOL_MAX_PER_DAY}`);
 
+  // 7b. earlier PRs of yours that are waiting on you: a project's reviewers must not be left hanging while you open more
+  const waiting = [];
+  for (const l of ledger.filter((x) => x.userId === user.id && x.number && now - x.at < 90 * DAY)) {
+    const st = guard(`read your earlier PR #${l.number}`, () => ({ pr: gh.pull(l.repoId, l.number), reviews: gh.reviews(l.repoId, l.number) }));
+    if (!st || st.pr.state !== "open") continue;
+    const cr = st.reviews.filter((r) => r.state === "CHANGES_REQUESTED" && r.submittedAt).sort((a, b) => Date.parse(a.submittedAt) - Date.parse(b.submittedAt)).at(-1);
+    if (cr && now - Date.parse(cr.submittedAt) > 7 * DAY && Date.parse(st.pr.updatedAt) <= Date.parse(cr.submittedAt)) waiting.push(`#${l.number} (changes requested ${cr.submittedAt.slice(0, 10)}, no activity since)`);
+  }
+  add("none of your earlier PRs is waiting on you", waiting.length === 0, `answer or close first: ${waiting.join(", ")}`);
+
   // 8. certification the human must make
   if (spec.certification.cla !== "none") add("CLA acknowledged", flags.claSigned === true, `this project requires a ${spec.certification.cla} CLA; pass --cla-signed once YOU have signed it (it can bind your employer)`);
   if (spec.certification.dco === "signed-off-by") add("DCO certification given", flags.certifyDco === true, "this project requires a Signed-off-by line; pass --certify-dco only if YOU can certify the Developer Certificate of Origin for this change");

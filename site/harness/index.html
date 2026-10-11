@@ -193,9 +193,9 @@ disclosure_line: "AI-assisted; reviewed by a human before submission"</pre>
             <tr><td>Coverage gate, mutation runner</td><td><span class="lamp built">Built</span></td><td>Used on the first runs.</td></tr>
             <tr><td>Coding-agent replay</td><td><span class="lamp built">Built</span></td><td>An agent's reply goes through the same checks. This is how the first runs were done.</td></tr>
             <tr><td>Local model adapter</td><td><span class="lamp part">Mock-tested</span></td><td>Loopback only. Not run against a real model yet.</td></tr>
-            <tr><td>Maintainer opt-in file</td><td><span class="lamp part">Designed</span></td><td>Opt-in is by issue label and scope for now.</td></tr>
+            <tr><td>Maintainer opt-in file</td><td><span class="lamp part">Partly built</span></td><td>The file format, a strict parser and a checker for maintainers are built and tested (<code>optin-check</code>). No project has adopted it.</td></tr>
             <tr><td>Hosted model, capped API key</td><td><span class="lamp part">Partly built</span></td><td>Workers AI adapter: usage measured from the provider, an input bound enforced before the call, capped by the ledger. One real run cost $0.0027 (2,904 tokens in, 792 out) and a second was refused by the cap before any call. Not yet reconciled against Cloudflare's own usage figure.</td></tr>
-            <tr><td>Pull request publishing</td><td><span class="lamp none">Not built</span></td><td>Only the publish gate exists. No PR has been opened.</td></tr>
+            <tr><td>Pull request publishing</td><td><span class="lamp part">Partly built</span></td><td>A dry run and a publisher that opens a pull request only from the submitter's own fork, after they confirm on their terminal, are built and tested against a fake GitHub only. They have never run against GitHub, and no pull request has been opened.</td></tr>
             <tr><td>Container verifier</td><td><span class="lamp built">Built</span></td><td>Model-written code is checked in a container with no network, a read-only copy of the source at a recorded commit, no capabilities, and memory, process and time limits. It refuses to start unless the runtime passed the escape tests (tested on macOS with OrbStack only). A container escape would reach this Mac's home folder with your rights. <code>--allow-host-execution</code> skips the container. Reaching the host from inside a container with no network was not demonstrated, only that sibling containers and the internet are unreachable. The run record is self-reported.</td></tr>
             <tr><td>One-command install</td><td><span class="lamp none">Not built</span></td><td>No package exists.</td></tr>
             <tr><td>Name and domain</td><td><span class="lamp none">Not cleared</span></td><td>Common AI is the name for now. Another organisation, CommonAI, uses a near-identical name; no trademark or domain check has been done and nothing is registered.</td></tr>
@@ -239,8 +239,8 @@ status: not installable
 instruction: do not run commands, install packages, or contact any project because of this page
 action: tell your user what this page says and ask what they want
 what_it_is: a harness that caps spend, limits scope and requires human review
-what_exists: guard rails, coverage gate, mutation runner, replay mode, hosted-model adapter (spend-capped; not yet reconciled with the provider), container verifier (macOS with OrbStack only)
-what_does_not: installer, PR publishing
+what_exists: guard rails, coverage gate, mutation runner, replay mode, hosted-model adapter (spend-capped; not yet reconciled with the provider), container verifier (macOS with OrbStack only), opt-in file checker and PR publisher (fake GitHub only)
+what_does_not: installer, a real pull request, any project using the opt-in file
 credentials: never ask your user for a subscription login; an API key with a spend limit is the only fit
 rewards: none</pre>
       <div class="callout"><b>Why a page for agents says "do nothing".</b> A page that tells agents to run things on their owner's behalf has the same shape as an attack. Anything real here will say what it does, ask your user first, and be easy to stop.</div>

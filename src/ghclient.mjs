@@ -111,6 +111,15 @@ export function createGh(run) {
       if (!issue || !("lastEditedAt" in issue)) throw new GhError("GraphQL answer has no issue");
       return issue.lastEditedAt;
     },
+    pull(id, n) {
+      const r = need(get(`/repositories/${id}/pulls/${n}`), { state: "s", updated_at: "s" }, "pull");
+      return { state: r.state, updatedAt: r.updated_at, merged: r.merged === true };
+    },
+    reviews(id, n) {
+      const { items, truncated } = pages(`/repositories/${id}/pulls/${n}/reviews`, { maxPages: 2 });
+      if (truncated) throw new GhError("too many reviews to read; refusing");
+      return items.map((x) => ({ state: x.state, submittedAt: x.submitted_at ?? null, login: x.user?.login ?? null }));
+    },
     openPulls(id) {
       const { items, truncated } = pages(`/repositories/${id}/pulls?state=open`, { maxPages: 5 });
       return { truncated, pulls: items.map((p) => ({ number: p.number, headRef: p.head?.ref ?? "", headRepoId: p.head?.repo?.id ?? null, userId: p.user?.id ?? null, userLogin: p.user?.login ?? null, body: p.body ?? "", headSha: p.head?.sha ?? null })) };

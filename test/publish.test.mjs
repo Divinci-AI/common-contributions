@@ -93,6 +93,7 @@ const cases = {
   "search fails": [{ world: (w) => (w.fail["/search/"] = 500) }, /search for agent pull requests/],
   "pulls cannot be counted": [{ world: (w) => (w.pulls = Array.from({ length: 501 }, (_, i) => ({ number: i, head: { ref: "x" }, user: {}, body: "" }))) }, /could be counted/],
   "published here in the last 24h": [{ ledger: [{ repoId: 1001, userId: 21, at: Date.now() - 3600e3 }] }, /last 24 hours/],
+  "an earlier PR has had changes requested for over a week with no reply": [{ ledger: [{ repoId: 3000, userId: 21, at: Date.now() - 20 * 86400e3, number: 9 }], world: (w) => (w.earlier = { "3000/9": { pr: { state: "open", updated_at: "2026-09-20T00:00:00Z" }, reviews: [{ state: "CHANGES_REQUESTED", submitted_at: "2026-09-20T00:00:00Z", user: { login: "m" } }] } }) }, /waiting on you/],
   "daily limit": [{ ledger: [1, 2, 3].map((i) => ({ repoId: 2000 + i, userId: 21, at: Date.now() - 3600e3 })) }, /daily limit/],
   "CLA required, not acknowledged": [{ spec: { ...SPEC, certification: { dco: "none", cla: "individual" } } }, /CLA acknowledged/],
   "DCO required, not certified": [{ spec: { ...SPEC, certification: { dco: "signed-off-by", cla: "none" } } }, /DCO certification/],
@@ -131,4 +132,12 @@ test("diffAgainstBase counts against the BASE commit, not the working tree", () 
   const d = diffAgainstBase(dir, base, { "tests/old.test.ts": "a\nb\nC\n", "tests/new.test.ts": "1\n2\n" });
   assert.deepEqual([d.added, d.deleted], [1 + 2, 1]);
   assert.match(d.patch, /a\/tests\/old\.test\.ts/); assert.ok(!d.patch.includes("LOCAL EDIT"));
+});
+
+test("an earlier PR you have answered, closed, or that only just got feedback does not block", () => {
+  const led = [{ repoId: 3000, userId: 21, at: Date.now() - 20 * 86400e3, number: 9 }];
+  const ok = (earlier) => plan({ ledger: led, world: (w) => (w.earlier = { "3000/9": earlier }) }).out.ok;
+  assert.equal(ok({ pr: { state: "open", updated_at: "2026-10-09T00:00:00Z" }, reviews: [{ state: "CHANGES_REQUESTED", submitted_at: "2026-09-20T00:00:00Z", user: { login: "m" } }] }), true, "answered since");
+  assert.equal(ok({ pr: { state: "closed", updated_at: "2026-09-20T00:00:00Z" }, reviews: [{ state: "CHANGES_REQUESTED", submitted_at: "2026-09-20T00:00:00Z", user: { login: "m" } }] }), true, "closed");
+  assert.equal(ok({ pr: { state: "open", updated_at: new Date(Date.now() - 86400e3).toISOString() }, reviews: [{ state: "CHANGES_REQUESTED", submitted_at: new Date(Date.now() - 86400e3).toISOString(), user: { login: "m" } }] }), true, "feedback is only a day old");
 });

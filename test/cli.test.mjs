@@ -361,3 +361,14 @@ test("publish: refuses without the pieces it needs, and never prompts or contact
   const r2 = await cli(["publish", "--record", rec, "--repo", "acme/widgets", "--issue", "7", "--clone", dir, "--description-file", join(dir, "d.md")], tmp());
   assert.equal(r2.status, 2); assert.match(r2.stderr, /no install key/);
 });
+
+test("run-one --task-label: a project's own label selects the task; the default stays agent-ready", async () => {
+  const { repo } = fixture();
+  const body = "## What\nx\n\n## Done when (one file: `orchestrator/src/provenance.test.ts`)\n- covers `orchestrator/src/provenance.ts`\n";
+  const issues = join(tmp(), "issues.json");
+  writeFileSync(issues, JSON.stringify([{ number: 23, title: "t", labels: [{ name: "help wanted (ai ok)" }], body }]));
+  const none = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--print-prompt"], tmp());
+  assert.equal(none.status, 2);
+  const yes = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--print-prompt", "--task-label", "help wanted (ai ok)"], tmp());
+  assert.equal(yes.status, 0, yes.stderr);
+});

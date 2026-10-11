@@ -4,8 +4,8 @@
  */
 export const OPT_IN_LABEL = "agent-ready";
 
-export function isOptedIn(issue) {
-  return (issue.labels ?? []).some((l) => (typeof l === "string" ? l : l?.name) === OPT_IN_LABEL);
+export function isOptedIn(issue, label = OPT_IN_LABEL) {
+  return (issue.labels ?? []).some((l) => (typeof l === "string" ? l : l?.name) === label);
 }
 
 /**
@@ -48,9 +48,9 @@ export function isAgentBranch(name) {
   );
 }
 
-export function selectRunnableTasks(issues) {
+export function selectRunnableTasks(issues, label = OPT_IN_LABEL) {
   return issues
-    .filter((i) => isOptedIn(i))
+    .filter((i) => isOptedIn(i, label))
     .map((i) => ({ number: i.number, title: i.title, body: i.body, allowed: allowedPaths(i.body) }))
     .filter((t) => t.allowed.length > 0);
 }

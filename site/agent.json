@@ -11,11 +11,12 @@
     "mutation-runner",
     "replay-mode",
     "hosted-model-adapter",
-    "container-verifier"
+    "container-verifier",
+    "opt-in-file-checker",
+    "pr-publisher-fake-github-only"
   ],
   "does_not_exist": [
-    "installer",
-    "pr-publishing"
+    "installer"
   ],
   "pages": {
     "overview": "index.html",

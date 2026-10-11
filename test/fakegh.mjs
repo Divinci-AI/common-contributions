@@ -57,6 +57,8 @@ export function fakeRunner(world) {
     if (path.startsWith("/users/")) { const u = world.users[decodeURIComponent(path.slice(7))]; return u ? ok(u) : err(404); }
     if (path.startsWith(`/repositories/${r.id}/issues/${world.issue.number}/events`)) return ok(page(world.events, path));
     if (path.startsWith(`/repositories/${r.id}/issues/${world.issue.number}`)) return ok(world.issue);
+    const pm = /^\/repositories\/(\d+)\/pulls\/(\d+)(\/reviews)?/.exec(path);
+    if (pm) { const e = world.earlier?.[`${pm[1]}/${pm[2]}`]; if (!e) return err(404); return pm[3] ? ok(page(e.reviews, path)) : ok(e.pr); }
     if (path.startsWith(`/repositories/${r.id}/pulls`)) return ok(page(world.pulls, path));
     if (path.startsWith(`/repositories/${r.id}/issues?`)) { const login = /creator=([^&]+)/.exec(path)?.[1]; return ok(page(world.closedIssuesByCreator[decodeURIComponent(login)] ?? [], path)); }
     if (path === `/repos/${world.forkName}`) return world.forkCreated ? ok({ full_name: world.forkName, fork: world.forkFlag ?? true, source: { id: world.forkSourceId ?? r.id }, owner: { login: world.forkOwner ?? world.forkName.split("/")[0] } }) : err(404);

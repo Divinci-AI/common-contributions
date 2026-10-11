@@ -110,7 +110,7 @@ if (cmd === "status") {
   // A replayed reply needs no network at all; a live local model must be loopback.
   if (!replyFile && provider === "ollama" && !["127.0.0.1", "localhost", "::1", "[::1]"].includes(hostName)) { console.error(`refusing: the ollama provider is for a LOCAL model; host "${hostName}" is not loopback`); process.exit(2); }
 
-  const task = selectRunnableTasks(JSON.parse(readFileSync(issuesFile, "utf8"))).find((t) => String(t.number) === String(numberArg));
+  const task = selectRunnableTasks(JSON.parse(readFileSync(issuesFile, "utf8")), flag("--task-label", "agent-ready")).find((t) => String(t.number) === String(numberArg));
   if (!task) { console.error(`issue #${numberArg} is not runnable (needs the agent-ready label and a parseable one-file scope)`); process.exit(2); }
 
   // Context the model gets: the source file(s) the issue names, and one small existing test as a style example.

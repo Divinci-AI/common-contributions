@@ -13,6 +13,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dockerEnv } from "./container.mjs";
 
+/** The short hash stamped on a dependency image (label) and recomputed from the project at run time. */
+export const depSha = (text) => createHash("sha256").update(text).digest("hex").slice(0, 12);
+
 export const DEPS_DIR = "/work/node_modules";
 export const REGISTRY = "https://registry.npmjs.org/";
 
@@ -53,7 +56,7 @@ export function buildDepImage({ docker, projectDir, baseDigest, noCache = true }
     writeFileSync(join(ctx, "package.json"), readFileSync(join(projectDir, "package.json")));
     writeFileSync(join(ctx, "package-lock.json"), lockText);
     writeFileSync(join(ctx, "Dockerfile"), dockerfile(baseDigest));
-    const lockSha = createHash("sha256").update(lockText).digest("hex").slice(0, 12);
+    const lockSha = depSha(lockText);
     const r = sh(docker, ["build", ...(noCache ? ["--no-cache"] : []), "-q", "--label", `cc.lock=${lockSha}`, ctx]);
     if (r.status !== 0) return { ok: false, refused: `docker build failed: ${(r.stderr || "").trim().slice(-400)}` };
     return { ok: true, image: r.stdout.trim(), lockSha };
@@ -101,7 +104,7 @@ export function buildPyDepImage({ docker, projectDir, baseDigest, noCache = true
   try {
     writeFileSync(join(ctx, "requirements.txt"), text);
     writeFileSync(join(ctx, "Dockerfile"), pyDockerfile(baseDigest));
-    const sha = createHash("sha256").update(text).digest("hex").slice(0, 12);
+    const sha = depSha(text);
     const r = sh(docker, ["build", ...(noCache ? ["--no-cache"] : []), "-q", "--label", `cc.requirements=${sha}`, ctx]);
     if (r.status !== 0) return { ok: false, refused: `docker build failed: ${(r.stderr || "").trim().slice(-400)}` };
     return { ok: true, image: r.stdout.trim(), lockSha: sha };

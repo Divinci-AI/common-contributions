@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmp } from "./helpers.mjs";
+import { depSha } from "../src/depimage.mjs";
 
 const CLI = fileURLToPath(new URL("../src/cli.mjs", import.meta.url));
 let server, port, requests, reply;
@@ -265,18 +266,69 @@ test("mutate: refuses to run model-written code on the host without the explicit
   assert.ok(!existsSync(marker));
 });
 
-test("run-one: --container-image never touches the host toolchain, and a failing container refuses rather than falling back", async () => {
+// Container verification: every refusal happens BEFORE anything runs, and nothing falls back to the host toolchain.
+function containerSetup({ label, pin = true }) {
   const { repo, issues } = fixture();
+  const lock = '{"lockfileVersion":3,"packages":{}}';
+  writeFileSync(join(repo, "orchestrator/package-lock.json"), lock);
   const { env, marker } = fakeNpx();
-  const dbin = tmp(), argvFile = join(tmp(), "argv");
-  const docker = join(dbin, "docker");
-  writeFileSync(docker, `#!/bin/sh\necho "$@" >> "${argvFile}"\nexit 1\n`, { mode: 0o755 });
-  const r = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--host", `http://127.0.0.1:${port}`, "--container-image", "sha256:" + "a".repeat(64), "--docker", docker], tmp(), env);
-  const rep = report(r);
+  const dbin = tmp(), argvFile = join(tmp(), "argv"), docker = join(dbin, "docker");
+  writeFileSync(docker, `#!/bin/sh\ncase "$1" in\n info) echo "e|k|o";;\n image) echo "${label ?? depSha(lock)}";;\n *) echo "$@" >> "${argvFile}"; exit 1;;\nesac\n`, { mode: 0o755 });
+  const pinFile = join(tmp(), "runtime-pin.json");
+  if (pin) writeFileSync(pinFile, JSON.stringify({ engine: "e", kernel: "k", os: "o" }));
+  const args = ["run-one", issues, "23", "--repo", repo, "--model", "m", "--host", `http://127.0.0.1:${port}`, "--container-image", "sha256:" + "a".repeat(64), "--docker", docker, "--runtime-pin", pinFile];
+  return { args, env, marker, argvFile, repo };
+}
+
+test("run-one in a container: a missing runtime pin refuses before docker is called", async () => {
+  const c = containerSetup({ pin: false });
+  const rep = report(await cli(c.args, tmp(), c.env));
+  assert.equal(rep.verify.ran, false);
+  assert.match(rep.verify.refused, /no runtime pin/);
+  assert.ok(!existsSync(c.argvFile) && !existsSync(c.marker));
+});
+
+test("run-one in a container: a dependency image built from a different lock file is refused", async () => {
+  const c = containerSetup({ label: "000000000000" });
+  const rep = report(await cli(c.args, tmp(), c.env));
+  assert.equal(rep.verify.ran, false);
+  assert.match(rep.verify.refused, /does not match the project/);
+  assert.ok(!existsSync(c.argvFile) && !existsSync(c.marker), "nothing was created or run");
+});
+
+test("run-one in a container: a failing docker refuses rather than falling back; the live checkout is never mounted", async () => {
+  const c = containerSetup({});
+  const rep = report(await cli(c.args, tmp(), c.env));
   assert.equal(rep.verify.ran, false);
   assert.match(rep.verify.refused, /docker create failed/);
-  assert.ok(!existsSync(marker), "npx must not have been spawned");
-  const argv = readFileSync(argvFile, "utf8");
+  assert.ok(!existsSync(c.marker), "npx must not have been spawned");
+  const argv = readFileSync(c.argvFile, "utf8");
   assert.match(argv, /--network none/);
-  assert.ok(!argv.includes(repo), "the live checkout is never mounted; only a per-run copy is");
+  assert.ok(!argv.includes(c.repo), "only a per-run copy is mounted");
+});
+
+test("the live-write default is pinned (flip LIVE_WRITE_DEFAULT and this test together, after Michael confirms)", () => {
+  assert.match(readFileSync(CLI, "utf8"), /export const LIVE_WRITE_DEFAULT = true;/);
+});
+
+test("mutate in a container: a refusal ABORTS the run (it must never be counted as a caught mutant)", async () => {
+  const c = containerSetup({ pin: false });
+  const muts = join(tmp(), "m.json");
+  writeFileSync(muts, JSON.stringify([{ id: "m1", old: "[\"direct\"]", new: "[]" }]));
+  const dockerArg = c.args[c.args.indexOf("--docker") + 1], pinArg = c.args[c.args.indexOf("--runtime-pin") + 1];
+  const r = await cli(["mutate", "--repo", c.repo, "--source", "orchestrator/src/provenance.ts", "--test", "orchestrator/src/other.test.ts", "--mutations", muts, "--container-image", "sha256:" + "a".repeat(64), "--docker", dockerArg, "--runtime-pin", pinArg], tmp(), c.env);
+  assert.notEqual(r.status, 0);
+  assert.ok(!/"caught"/.test(r.stdout + r.stderr), "no mutant may be reported caught when the container run was refused");
+  assert.match(r.stderr, /no runtime pin|container run refused/);
+});
+
+test("mutate in a container: a dependency-image mismatch aborts with the refusal, never as a caught mutant", async () => {
+  const c = containerSetup({ label: "000000000000" });
+  const muts = join(tmp(), "m.json");
+  writeFileSync(muts, JSON.stringify([{ id: "m1", old: "[\"direct\"]", new: "[]" }]));
+  const a = (n) => c.args[c.args.indexOf(n) + 1];
+  const r = await cli(["mutate", "--repo", c.repo, "--source", "orchestrator/src/provenance.ts", "--test", "orchestrator/src/other.test.ts", "--mutations", muts, "--container-image", "sha256:" + "a".repeat(64), "--docker", a("--docker"), "--runtime-pin", a("--runtime-pin")], tmp(), c.env);
+  assert.notEqual(r.status, 0);
+  assert.ok(!/"caught"/.test(r.stdout + r.stderr));
+  assert.match(r.stderr, /container run refused: dependency image does not match/);
 });

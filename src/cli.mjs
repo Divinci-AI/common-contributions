@@ -26,10 +26,17 @@ import { makeReplayAgent } from "./adapters/replay.mjs";
 import { applyFiles, runChecked } from "./verify.mjs";
 import { coverageReport, unacknowledgedTests } from "./coverage.mjs";
 import { runMutations } from "./mutate.mjs";
-import { runContained, readRuntime } from "./container.mjs";
+import { readRuntime, LIMITS } from "./container.mjs";
 import { buildDepImage, buildPyDepImage } from "./depimage.mjs";
 import { writeFileSync as writeFile } from "node:fs";
-import { copySource } from "./sourcecopy.mjs";
+import { copySource, copyFromGit, resolveBase, attributeProblems } from "./sourcecopy.mjs";
+import { resolveProfile, testRelative } from "./profile.mjs";
+import { runProfileChecks } from "./verifier.mjs";
+import { buildRecord, verifyRecord } from "./record.mjs";
+import { loadPin, qualifyRuntime, parseTap } from "./pin.mjs";
+import { cleanup } from "./hygiene.mjs";
+import { fileURLToPath } from "node:url";
+import { mkdirSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { rmSync as rmTree } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -39,17 +46,10 @@ const HOST_FLAG = "--allow-host-execution";
 const HOST_REFUSAL = `refusing to run model-written code on this machine without a container. Pass --container-image <image id> (see build-deps), or ${HOST_FLAG} to run it on the host anyway, or --no-verify to skip verification.`;
 
 const CONTAINER_FLAG = "--container-image";
-/** Run a command in the container on a per-run copy of the source. Returns {ok, tail, ...} or {refused}. */
-function containerCheck({ flagsArr, srcDir, subdir, cmd }) {
-  const at = (n) => { const i = flagsArr.indexOf(n); return i === -1 ? undefined : flagsArr[i + 1]; };
-  const image = at(CONTAINER_FLAG);
-  const docker = at("--docker") ?? spawnSync("/usr/bin/which", ["docker"], { encoding: "utf8" }).stdout.trim();
-  const pinFile = at("--runtime-pin");
-  const pin = pinFile ? JSON.parse(readFileSync(pinFile, "utf8")) : undefined;
-  const r = runContained({ docker, image, srcDir, subdir, cmd, runId: randomBytes(6).toString("hex"), pin });
-  if (!r.ran) return { ran: false, ok: false, refused: r.refused, tail: r.refused };
-  return { ran: true, ok: r.ok, timedOut: r.timedOut, tail: (r.stdout + r.stderr).split("\n").slice(-20).join("\n") };
-}
+const dockerPath = (flagsArr) => { const i = flagsArr.indexOf("--docker"); return i !== -1 ? flagsArr[i + 1] : spawnSync("/usr/bin/which", ["docker"], { encoding: "utf8" }).stdout.trim(); };
+const pinFor = (flagsArr) => { const i = flagsArr.indexOf("--runtime-pin"); return loadPin(i !== -1 ? flagsArr[i + 1] : join(stateDir, "runtime-pin.json")); };
+/** Model output goes to the working tree unless told otherwise. Flip this ONE constant (and its test) once Michael confirms the default. */
+export const LIVE_WRITE_DEFAULT = true;
 
 const stateDir = defaultStateDir();
 const kill = new KillSwitch({ stateDir });
@@ -182,17 +182,46 @@ if (cmd === "status") {
       report.outcome = "no-file";
       report.reason = "the model returned no fenced code block";
     } else {
-      report.wrote = applyFiles({ root: repo, files: result.files, allowed: task.allowed });
+      const live = flags.includes("--apply") || (LIVE_WRITE_DEFAULT && !flags.includes("--no-apply"));
+      if (live) report.wrote = applyFiles({ root: repo, files: result.files, allowed: task.allowed });
+      if (flag("--out")) {
+        mkdirSync(flag("--out"), { recursive: true });
+        report.out = applyFiles({ root: flag("--out"), files: result.files, allowed: task.allowed });
+      }
       if (!flags.includes("--no-verify") && flags.includes(CONTAINER_FLAG)) {
-        const copy = copySource(repo); // after applyFiles, so the copy holds the model's file; the live checkout is not mounted
+        let dir;
         try {
-          const rel = task.allowed[0].replace(/^orchestrator\//, "");
-          const tsc = containerCheck({ flagsArr: flags, srcDir: copy, subdir: "orchestrator", cmd: ["/work/node_modules/.bin/tsc", "--noEmit"] });
-          const vt = containerCheck({ flagsArr: flags, srcDir: copy, subdir: "orchestrator", cmd: ["/work/node_modules/.bin/vitest", "run", "--configLoader", "runner", rel] });
-          report.verify = { ran: tsc.ran && vt.ran, where: "container (no network, read-only source)", ...(tsc.refused || vt.refused ? { refused: tsc.refused ?? vt.refused } : {}) };
-          report.tsc = { ok: tsc.ok, tail: tsc.tail };
-          report.vitest = { ok: vt.ok, tail: vt.tail };
-        } finally { rmTree(copy, { recursive: true, force: true }); }
+          const profile = resolveProfile(flag("--profile", "node"));
+          const docker = dockerPath(flags), image = flag(CONTAINER_FLAG), pin = pinFor(flags);
+          const base = resolveBase(repo, flag("--base", "HEAD"));
+          let source;
+          if (base) {
+            // The source as upstream has it at a recorded commit (no local edits), plus exactly the model's files.
+            const attr = attributeProblems(repo, result.files);
+            if (attr.length > 0) throw new Error(`refusing: ${attr.join("; ")}`);
+            ({ dir } = copyFromGit(repo, base));
+            source = "git-archive";
+          } else {
+            dir = copySource(repo);
+            source = "working-tree-copy (not publishable: no recorded commit)";
+          }
+          applyFiles({ root: dir, files: result.files, allowed: task.allowed });
+          const v = runProfileChecks({ docker, image, pin, srcDir: dir, profile, testPath: task.allowed[0] });
+          report.verify = { ran: v.ran, where: "container (no network, read-only source)", ...(v.refused ? { refused: v.refused } : {}) };
+          for (const c of v.checks ?? []) report[c.name] = { ok: c.ok, tail: c.tail };
+          const harnessDir = fileURLToPath(new URL("..", import.meta.url));
+          const rec = buildRecord({
+            harness: { commit: resolveBase(harnessDir) }, project: { dir: basename(repo), issue: task.number }, base, source, container: v.ran === true,
+            runtime: v.runtime, pin, image, dep: v.dep, limits: LIMITS, profile: profile.language, files: result.files,
+            checks: (v.checks ?? []).map((c) => ({ name: c.name, argv: c.argv, status: c.status, timedOut: c.timedOut, tail: c.tail })), ledger: report.ledger,
+          });
+          const recDir = flag("--out") ?? join(stateDir, "runs", `${new Date().toISOString().replace(/[:.]/g, "-")}-issue${task.number}`);
+          mkdirSync(recDir, { recursive: true });
+          writeFile(join(recDir, "run-record.json"), JSON.stringify(rec, null, 2) + "\n");
+          report.record = join(recDir, "run-record.json");
+        } catch (e) {
+          report.verify = { ran: false, refused: e instanceof Error ? e.message : String(e) };
+        } finally { if (dir) rmTree(dir, { recursive: true, force: true }); }
       } else if (!flags.includes("--no-verify") && !flags.includes(HOST_FLAG)) {
         report.verify = { ran: false, refused: HOST_REFUSAL };
       } else if (!flags.includes("--no-verify")) {
@@ -216,12 +245,27 @@ if (cmd === "status") {
   if (!r.ok) { console.error(r.refused); process.exit(2); }
   console.log(r.image);
 } else if (cmd === "pin-runtime") {
+  // Runs the escape tests on THIS runtime first; the pin is written only if they pass.
   const flag = (n) => { const i = rest.indexOf(n); return i === -1 ? undefined : rest[i + 1]; };
-  const out = flag("--out");
-  const docker = flag("--docker") ?? spawnSync("/usr/bin/which", ["docker"], { encoding: "utf8" }).stdout.trim();
-  if (!out) { console.error("usage: pin-runtime --out runtime-pin.json [--docker /abs/docker]  (run the escape tests first; the pin says which runtime they passed on)"); process.exit(2); }
-  writeFile(out, JSON.stringify(readRuntime(docker), null, 2) + "\n");
-  console.log(`wrote ${out}`);
+  const out = flag("--out") ?? join(stateDir, "runtime-pin.json");
+  const docker = dockerPath(rest);
+  const harnessDir = fileURLToPath(new URL("..", import.meta.url));
+  const runSuite = () => {
+    const r = spawnSync(process.execPath, ["--test", join(harnessDir, "test", "escape.test.mjs")], { encoding: "utf8", env: { PATH: "/usr/bin:/bin", ...(process.env.CC_PY_IMAGE ? { CC_PY_IMAGE: process.env.CC_PY_IMAGE } : {}) }, maxBuffer: 32 * 1024 * 1024, timeout: 900_000 });
+    return parseTap(r.stdout ?? "");
+  };
+  const q = qualifyRuntime({ docker, runSuite, out, harness: { commit: resolveBase(harnessDir) } });
+  if (!q.ok) { console.error(q.reason); process.exit(2); }
+  console.log(`wrote ${out} (${q.pin.engine}, ${q.pin.kernel}); escape suite ${q.pin.escapeSuite.pass} passed, ${q.pin.escapeSuite.skipped} skipped`);
+} else if (cmd === "verify-record") {
+  const file = rest[0], ti = rest.indexOf("--tree");
+  if (!file) { console.error("usage: verify-record <run-record.json> [--tree <dir>]  (with --tree: the files on disk must equal what was checked)"); process.exit(2); }
+  const problems = verifyRecord(JSON.parse(readFileSync(file, "utf8")), ti === -1 ? {} : { treeDir: rest[ti + 1] });
+  if (problems.length > 0) { console.error(problems.join("\n")); process.exit(2); }
+  console.log("record is consistent" + (ti === -1 ? "" : " and the tree matches it"));
+} else if (cmd === "cleanup") {
+  const r = cleanup({ docker: dockerPath(rest), images: rest.includes("--images") });
+  console.log(JSON.stringify(r));
 } else if (cmd === "coverage") {
   const flag = (n) => { const i = rest.indexOf(n); return i === -1 ? undefined : rest[i + 1]; };
   const repo = flag("--repo"), mod = flag("--module");
@@ -233,14 +277,19 @@ if (cmd === "status") {
   if (!repo || !source || !test || !file) { console.error("usage: mutate --repo <dir> --source <path> --test <path> --mutations <file.json> [--cwd <subdir>]"); process.exit(2); }
   const inContainer = rest.includes(CONTAINER_FLAG);
   if (!inContainer && !rest.includes(HOST_FLAG)) { console.error(HOST_REFUSAL); process.exit(2); }
+  // Mutation analysis is local, so it runs on a copy of the WORKING TREE (the test under analysis may not be committed yet).
   const copy = inContainer ? copySource(repo) : undefined;
   const root = copy ?? repo;
   const cwd = join(root, cwdRel);
   const testInCwd = test.startsWith(cwdRel + "/") ? test.slice(cwdRel.length + 1) : test;
   const runTest = () => {
     if (inContainer) {
-      const c = containerCheck({ flagsArr: rest, srcDir: copy, subdir: cwdRel === "." ? "" : cwdRel, cmd: ["/work/node_modules/.bin/vitest", "run", "--configLoader", "runner", testInCwd] });
-      return { ok: c.ok, output: c.tail ?? "" };
+      const profile = resolveProfile(flag("--profile") ?? "node");
+      // A refusal must ABORT the run: if it came back as {ok:false} every mutant would be classified "caught".
+      const v = runProfileChecks({ docker: dockerPath(rest), image: flag(CONTAINER_FLAG), pin: pinFor(rest), srcDir: copy, profile, testPath: test, only: profile.testCheck });
+      if (!v.ran) throw new Error(`container run refused: ${v.refused}`);
+      const c = v.checks[0];
+      return { ok: c.ok, output: c.tail };
     }
     const r = runChecked({ cwd, command: "npx", args: ["--no-install", "vitest", "run", testInCwd] });
     return { ok: r.ok, output: r.stdout + r.stderr };
@@ -249,6 +298,6 @@ if (cmd === "status") {
   try { out = runMutations({ root, sourcePath: source, mutations: JSON.parse(readFileSync(file, "utf8")), runTest }); } finally { if (copy) rmTree(copy, { recursive: true, force: true }); }
   console.warn(JSON.stringify(out, null, 2));
 } else {
-  console.error("usage: status | stop [reason] | clear-stop --yes | dry-run <issues.json> | run-one ... | build-deps ... | pin-runtime ... | coverage ... | mutate ...");
+  console.error("usage: status | stop [reason] | clear-stop --yes | dry-run <issues.json> | run-one ... | build-deps ... | pin-runtime ... | verify-record ... | cleanup ... | coverage ... | mutate ...");
   process.exit(2);
 }

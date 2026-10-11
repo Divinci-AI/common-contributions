@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { buildSandboxEnv } from "./secrets.mjs";
 import { diffScopeViolations, isConfigFile } from "./scope.mjs";
+import { skippedByCopy } from "./sourcecopy.mjs";
 
 /** Write the files, refusing anything outside the allowed set or resolving outside `root`. Returns written paths. */
 export function applyFiles({ root, files, allowed }) {
@@ -15,6 +16,8 @@ export function applyFiles({ root, files, allowed }) {
   if (bad.length > 0) throw new Error(`refusing to write files outside scope: ${bad.join(", ")}`);
   const configTouched = Object.keys(files).filter(isConfigFile);
   if (configTouched.length > 0) throw new Error(`refusing to write dependency or config files: ${configTouched.join(", ")}`);
+  const skipped = Object.keys(files).filter(skippedByCopy);
+  if (skipped.length > 0) throw new Error(`refusing to write paths the verified copy leaves out (env files, keys, build output): ${skipped.join(", ")}`);
   const absRoot = resolve(root);
   const written = [];
   for (const [rel, content] of Object.entries(files)) {

@@ -53,3 +53,9 @@ test("python dockerfile: wheels only, hashes required, no deps resolution", () =
   for (const f of ["--require-hashes", "--only-binary :all:", "--no-deps"]) assert.ok(d.includes(f), f);
 });
 test("python: a tag instead of a digest is refused", () => assert.equal(buildPyDepImage({ docker: "/x", projectDir: "/x", baseDigest: "python:3" }).ok, false));
+
+import { readFileSync as rf } from "node:fs";
+test("dependency images are TAGGED, so a plain `docker image prune` (which removes untagged images) cannot delete them", () => {
+  const src = rf(new URL("../src/depimage.mjs", import.meta.url), "utf8");
+  assert.ok(/"-t", `cc-deps:node-/.test(src) && /"-t", `cc-deps:py-/.test(src));
+});

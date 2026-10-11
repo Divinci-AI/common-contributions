@@ -10,12 +10,12 @@
     "coverage-gate",
     "mutation-runner",
     "replay-mode",
-    "hosted-model-adapter"
+    "hosted-model-adapter",
+    "container-verifier"
   ],
   "does_not_exist": [
     "installer",
-    "pr-publishing",
-    "os-sandbox"
+    "pr-publishing"
   ],
   "pages": {
     "overview": "index.html",

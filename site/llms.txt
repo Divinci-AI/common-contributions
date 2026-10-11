@@ -15,11 +15,11 @@ There are no rewards of any kind.
 - Replay mode, where an agent's reply passes through the same checks
 - A hosted-model adapter (Workers AI) held to a spend cap by the ledger; its cost has not yet been reconciled against the provider's own figure
 - A local-model adapter, tested against a mock only
+- A container verifier for model-written code (tested on macOS with OrbStack only; skipped if a person passes a flag to run on the host)
 
 ## What does not exist
 - An installer or package
 - Pull request publishing
-- An operating-system sandbox
 - A name and domain check: "Common AI" is a working title; another organisation, CommonAI, uses a near-identical name. The tool itself is called Common Contributions.
 
 ## Source and feedback

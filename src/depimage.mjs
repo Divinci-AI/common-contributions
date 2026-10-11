@@ -57,7 +57,7 @@ export function buildDepImage({ docker, projectDir, baseDigest, noCache = true }
     writeFileSync(join(ctx, "package-lock.json"), lockText);
     writeFileSync(join(ctx, "Dockerfile"), dockerfile(baseDigest));
     const lockSha = depSha(lockText);
-    const r = sh(docker, ["build", ...(noCache ? ["--no-cache"] : []), "-q", "--label", `cc.lock=${lockSha}`, ctx]);
+    const r = sh(docker, ["build", ...(noCache ? ["--no-cache"] : []), "-q", "--label", `cc.lock=${lockSha}`, "-t", `cc-deps:node-${lockSha}`, ctx]);
     if (r.status !== 0) return { ok: false, refused: `docker build failed: ${(r.stderr || "").trim().slice(-400)}` };
     return { ok: true, image: r.stdout.trim(), lockSha };
   } finally {
@@ -105,7 +105,7 @@ export function buildPyDepImage({ docker, projectDir, baseDigest, noCache = true
     writeFileSync(join(ctx, "requirements.txt"), text);
     writeFileSync(join(ctx, "Dockerfile"), pyDockerfile(baseDigest));
     const sha = depSha(text);
-    const r = sh(docker, ["build", ...(noCache ? ["--no-cache"] : []), "-q", "--label", `cc.requirements=${sha}`, ctx]);
+    const r = sh(docker, ["build", ...(noCache ? ["--no-cache"] : []), "-q", "--label", `cc.requirements=${sha}`, "-t", `cc-deps:py-${sha}`, ctx]);
     if (r.status !== 0) return { ok: false, refused: `docker build failed: ${(r.stderr || "").trim().slice(-400)}` };
     return { ok: true, image: r.stdout.trim(), lockSha: sha };
   } finally {

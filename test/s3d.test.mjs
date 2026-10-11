@@ -123,3 +123,20 @@ test("cleanup removes only labelled containers and never prunes", () => {
   assert.ok(!/prune/.test(lines));
   assert.deepEqual(cleanup({ docker }), { containers: 1, images: 0 });
 });
+
+// ---- verifier: the dependency image must come from THIS project's dependency file
+import { matchDepImage, runProfileChecks } from "../src/verifier.mjs";
+import { depSha } from "../src/depimage.mjs";
+function fakeDocker(label) { const f = join(tmp(), "docker"); writeFileSync(f, `#!/bin/sh\nif [ "$1" = image ]; then echo "${label}"; exit 0; fi\nexit 1\n`, { mode: 0o755 }); return f; }
+test("verifier: matches only when the image label equals the hash of the project's dependency file", () => {
+  const src = tmp(); mkdirSync(join(src, "orchestrator"), { recursive: true }); writeFileSync(join(src, "orchestrator/package-lock.json"), "LOCK");
+  assert.equal(matchDepImage({ docker: fakeDocker(depSha("LOCK")), image: "x", srcDir: src, profile: PROFILES.node }).matched, true);
+  assert.equal(matchDepImage({ docker: fakeDocker("deadbeefdead"), image: "x", srcDir: src, profile: PROFILES.node }).matched, false);
+  assert.equal(matchDepImage({ docker: fakeDocker(""), image: "x", srcDir: src, profile: PROFILES.node }).matched, false, "an image with no label never matches");
+  assert.equal(matchDepImage({ docker: fakeDocker(depSha("LOCK")), image: "x", srcDir: tmp(), profile: PROFILES.node }).matched, false, "no dependency file in the source");
+});
+test("verifier: a mismatch refuses before any container is created", () => {
+  const src = tmp(); mkdirSync(join(src, "orchestrator"), { recursive: true }); writeFileSync(join(src, "orchestrator/package-lock.json"), "LOCK");
+  const r = runProfileChecks({ docker: fakeDocker("deadbeefdead"), image: "x", pin: {}, srcDir: src, profile: PROFILES.node, testPath: "orchestrator/src/a.test.ts" });
+  assert.equal(r.ran, false); assert.match(r.refused, /does not match the project/);
+});

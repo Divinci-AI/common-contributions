@@ -81,3 +81,19 @@ test("no surface still says the design relies on the agent returning text (a con
     assert.ok(!/relies on the agent returning text|depends on the agent returning text|No OS-level sandbox/i.test(read(f)), `${f} has the stale sandbox claim`);
   }
 });
+
+test("every surface agrees with status.json about the container verifier", () => {
+  const row = rows.find((r) => r.piece === "Container verifier");
+  assert.ok(row, "row exists");
+  const built = row.status === "built";
+  const llms = read("site/llms.txt");
+  const [exists, doesNot = ""] = llms.split(/^## What does not exist$/m);
+  const agent = JSON.parse(read("site/agent.json"));
+  const note = read("site/harness/index.html");
+  const noteExists = note.match(/what_exists: .*/)?.[0] ?? "", noteNot = note.match(/what_does_not: .*/)?.[0] ?? "";
+  const mentionsNot = [doesNot, agent.does_not_exist.join(" "), noteNot, read("site/index.html").match(/Not built<\/b>.*/)?.[0] ?? ""].some((t) => /sandbox|container/i.test(t));
+  const mentionsYes = /container/i.test(exists) || agent.exists.some((e) => /container/i.test(e)) || /container/i.test(noteExists);
+  assert.equal(mentionsNot, !built, "a surface lists the container verifier on the wrong side");
+  assert.equal(mentionsYes, built);
+  if (built) assert.ok(/macOS/.test(row.detail) && /home folder/.test(row.detail) && /allow-host-execution/.test(row.detail), "the row keeps its limits: one runtime, what an escape reaches, the host flag");
+});

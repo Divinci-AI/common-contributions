@@ -36,7 +36,7 @@ State: `$COMMON_CONTRIBUTIONS_HOME` (default `~/.local/state/common-ai`, or `$XD
 - **Adapters.** A local one (Ollama, loopback only; mock-tested, not yet run against a real model) and a hosted one (Cloudflare Workers AI; usage
   measured from the provider's own counters, an input bound enforced before the call, so the reservation really is the worst case). One real hosted run is on the
   ledger ($0.0027 for 2,904 tokens in and 792 out). It has **not** been reconciled against Cloudflare's own usage figure, which needs an analytics-read credential.
-- **The container verifier is not the default path yet.** The agent only *returns file contents*; the harness writes them. Running them is refused unless a person passes `--allow-host-execution` (or uses the container runner, which is being finished).
+- **The container is one boundary, tested on one runtime.** The agent only *returns file contents*; the harness writes them and runs the project's checks in a container (`--container-image`, after `build-deps` and `pin-runtime`). Without a container, running them is refused unless you pass `--allow-host-execution`. Tested on macOS with OrbStack only; an escape would reach your home folder with your rights.
   If an adapter ever hands the agent a shell, env scrubbing is not isolation; use a container/VM.
 - **No git/PR publishing.** Only the `assertPublishable` gate exists.
 - **`--tool-uses` is relayed by whoever runs the harness**, not measured by it: a replayed agent's tool count cannot be verified here.

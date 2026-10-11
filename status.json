@@ -95,9 +95,25 @@
       "detail": "Only the publish gate exists. No PR has been opened."
     },
     {
-      "piece": "Operating-system sandbox",
-      "status": "not-built",
-      "detail": "A container runner with fail-closed checks and real-docker escape tests is in the repo, but it is not yet the default path and has not passed an end-to-end run through the command line. Until then, verifying model-written code is refused unless a person passes a flag to run it on this machine."
+      "piece": "Container verifier",
+      "status": "built",
+      "detail": "Model-written code is checked in a container with no network, a read-only copy of the source at a recorded commit, no capabilities, and memory, process and time limits. It refuses to start unless the runtime passed the escape tests (tested on macOS with OrbStack only). A container escape would reach this Mac's home folder with your rights. <code>--allow-host-execution</code> skips the container. Reaching the host from inside a container with no network was not demonstrated, only that sibling containers and the internet are unreachable. The run record is self-reported.",
+      "modules": [
+        "src/container.mjs",
+        "src/depimage.mjs",
+        "src/sourcecopy.mjs",
+        "src/verifier.mjs",
+        "src/profile.mjs",
+        "src/record.mjs",
+        "src/pin.mjs"
+      ],
+      "tests": [
+        "test/container.test.mjs",
+        "test/escape.test.mjs",
+        "test/depimage.test.mjs",
+        "test/sourcecopy.test.mjs",
+        "test/s3d.test.mjs"
+      ]
     },
     {
       "piece": "One-command install",

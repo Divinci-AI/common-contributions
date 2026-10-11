@@ -35,6 +35,7 @@ import { runProfileChecks } from "./verifier.mjs";
 import { buildRecord, verifyRecord, harnessIdentity, issueHash, loadOrCreateKey } from "./record.mjs";
 import { loadPin, qualifyRuntime, parseTap } from "./pin.mjs";
 import { cleanup } from "./hygiene.mjs";
+import { parseOptIn } from "./optin.mjs";
 import { fileURLToPath } from "node:url";
 import { mkdirSync } from "node:fs";
 import { randomBytes } from "node:crypto";
@@ -273,6 +274,12 @@ if (cmd === "status") {
   const problems = verifyRecord(JSON.parse(readFileSync(file, "utf8")), { ...(ti === -1 ? {} : { treeDir: rest[ti + 1] }), key: loadOrCreateKey(stateDir, { create: false }) });
   if (problems.length > 0) { console.error(problems.join("\n")); process.exit(2); }
   console.log("record is consistent" + (ti === -1 ? "" : " and the tree matches it"));
+} else if (cmd === "optin-check") {
+  // For maintainers: is this file valid? Reads the file only; contacts nothing.
+  if (!rest[0]) { console.error("usage: optin-check <.github/agent-contributions.json>"); process.exit(2); }
+  const r = parseOptIn(readFileSync(rest[0]));
+  if (!r.ok) { console.error(`refused:\n  ${r.errors.join("\n  ")}`); process.exit(2); }
+  console.log(`valid (tasks need the "${r.value.task_label}" label applied by ${r.value.label_applied_by.join(", ")}; at most ${r.value.max_open_agent_prs} open PR(s), ${r.value.max_diff_lines} changed lines; ${r.value.paused ? "PAUSED" : "not paused"}; review by ${r.value.review_by})`);
 } else if (cmd === "cleanup") {
   const r = cleanup({ docker: dockerPath(rest), images: rest.includes("--images") });
   console.log(JSON.stringify(r));
@@ -308,6 +315,6 @@ if (cmd === "status") {
   try { out = runMutations({ root, sourcePath: source, mutations: JSON.parse(readFileSync(file, "utf8")), runTest }); } finally { if (copy) rmTree(copy, { recursive: true, force: true }); }
   console.warn(JSON.stringify(out, null, 2));
 } else {
-  console.error("usage: status | stop [reason] | clear-stop --yes | dry-run <issues.json> | run-one ... | build-deps ... | pin-runtime ... | verify-record ... | cleanup ... | coverage ... | mutate ...");
+  console.error("usage: status | stop [reason] | clear-stop --yes | dry-run <issues.json> | run-one ... | build-deps ... | pin-runtime ... | verify-record ... | optin-check ... | cleanup ... | coverage ... | mutate ...");
   process.exit(2);
 }

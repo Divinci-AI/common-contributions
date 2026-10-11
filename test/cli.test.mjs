@@ -344,3 +344,12 @@ test("run-one: without --apply the working tree is not written; --out gets the f
   assert.ok(!existsSync(join(repo, "orchestrator/src/provenance.test.ts")), "the working tree is untouched");
   assert.ok(existsSync(join(out, "orchestrator/src/provenance.test.ts")));
 });
+
+test("optin-check: a valid file is described, an invalid one is refused with reasons, and nothing is contacted", async () => {
+  const dir = tmp(), f = join(dir, "a.json"), g = join(dir, "b.json");
+  const soon = new Date(Date.now() + 90 * 86400e3).toISOString().slice(0, 10);
+  writeFileSync(f, JSON.stringify({ version: 1, opt_in: true, contact: "@m", policy_url: "https://example.org/p", review_by: soon, label_applied_by: ["m"], disclosure: { mechanism: "commit_trailer" }, certification: { dco: "none", cla: "none" } }));
+  writeFileSync(g, '{"version":1,"opt_in":true,"opt_in":false}');
+  const ok = await cli(["optin-check", f], tmp()); assert.equal(ok.status, 0, ok.stderr); assert.match(ok.stdout, /valid/);
+  const no = await cli(["optin-check", g], tmp()); assert.equal(no.status, 2); assert.match(no.stderr, /duplicate key/);
+});

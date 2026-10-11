@@ -60,7 +60,7 @@ const report = (r) => JSON.parse(r.stderr.slice(r.stderr.indexOf("{")));
 test("run-one: a local model's file is validated, written into the repo, and nothing is committed", async () => {
   const { repo, issues } = fixture();
   requests.length = 0;
-  const r = await cli(["run-one", issues, "23", "--repo", repo, "--model", "mock-model", "--host", `http://127.0.0.1:${port}`, "--no-verify"], tmp());
+  const r = await cli(["run-one", issues, "23", "--repo", repo, "--model", "mock-model", "--host", `http://127.0.0.1:${port}`, "--no-verify", "--apply"], tmp());
   assert.equal(r.status, 0, r.stderr);
   const rep = report(r);
   assert.equal(rep.outcome, "ok");
@@ -130,7 +130,7 @@ const replayArgs = (issues, repo, reply, extra = []) => ["run-one", issues, "23"
 test("replay: a clean reply is validated and written, with no network at all", async () => {
   const { repo, issues } = fixture();
   requests.length = 0;
-  const r = await cli(replayArgs(issues, repo, replyFile(REPLY), ["--tool-uses", "0", "--tokens", "1200,300"]), tmp());
+  const r = await cli(replayArgs(issues, repo, replyFile(REPLY), ["--tool-uses", "0", "--tokens", "1200,300", "--apply"]), tmp());
   const rep = report(r);
   assert.equal(rep.outcome, "ok");
   assert.deepEqual(rep.wrote, ["orchestrator/src/provenance.test.ts"]);
@@ -307,8 +307,8 @@ test("run-one in a container: a failing docker refuses rather than falling back;
   assert.ok(!argv.includes(c.repo), "only a per-run copy is mounted");
 });
 
-test("the live-write default is pinned (flip LIVE_WRITE_DEFAULT and this test together, after Michael confirms)", () => {
-  assert.match(readFileSync(CLI, "utf8"), /export const LIVE_WRITE_DEFAULT = true;/);
+test("the live-write default is pinned OFF (Michael confirmed 2026-10-11: model output is not written to the working tree unless --apply)", () => {
+  assert.match(readFileSync(CLI, "utf8"), /export const LIVE_WRITE_DEFAULT = false;/);
 });
 
 test("mutate in a container: a refusal ABORTS the run (it must never be counted as a caught mutant)", async () => {
@@ -331,4 +331,15 @@ test("mutate in a container: a dependency-image mismatch aborts with the refusal
   assert.notEqual(r.status, 0);
   assert.ok(!/"caught"/.test(r.stdout + r.stderr));
   assert.match(r.stderr, /container run refused: dependency image does not match/);
+});
+
+test("run-one: without --apply the working tree is not written; --out gets the files", async () => {
+  const { repo, issues } = fixture();
+  const out = join(tmp(), "out");
+  const r = await cli(replayArgs(issues, repo, replyFile(REPLY), ["--tool-uses", "0", "--tokens", "1200,300", "--out", out]), tmp());
+  const rep = report(r);
+  assert.equal(rep.outcome, "ok");
+  assert.equal(rep.wrote, undefined);
+  assert.ok(!existsSync(join(repo, "orchestrator/src/provenance.test.ts")), "the working tree is untouched");
+  assert.ok(existsSync(join(out, "orchestrator/src/provenance.test.ts")));
 });

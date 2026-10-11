@@ -6,7 +6,7 @@
  *   node src/cli.mjs dry-run <issues.json>   run the loop with a STUB agent (no model, no network)
  *   node src/cli.mjs run-one <issues.json> <issueNumber> --repo <dir> --model <ollama-model> [--host URL] [--no-verify | --container-image <id> [--docker /abs/docker] [--runtime-pin file] | --allow-host-execution]
  *       (--reply-file F [--tokens in,out]: replay an already-written reply through the same checks; --print-prompt: show the prompt)
- *       ONE issue, a LOCAL Ollama model ($0). Writes the one allowed file into --repo's working tree and runs the
+ *       ONE issue, a LOCAL Ollama model ($0). Checks the one allowed file (written into --repo's working tree only with --apply; --out DIR writes it elsewhere) and runs the
  *       project's own tsc + vitest on it. Never commits, pushes or opens a PR.
  * State lives in $COMMON_CONTRIBUTIONS_HOME (default ~/.local/state/common-ai; see paths.mjs).
  */
@@ -48,8 +48,8 @@ const HOST_REFUSAL = `refusing to run model-written code on this machine without
 const CONTAINER_FLAG = "--container-image";
 const dockerPath = (flagsArr) => { const i = flagsArr.indexOf("--docker"); return i !== -1 ? flagsArr[i + 1] : spawnSync("/usr/bin/which", ["docker"], { encoding: "utf8" }).stdout.trim(); };
 const pinFor = (flagsArr) => { const i = flagsArr.indexOf("--runtime-pin"); return loadPin(i !== -1 ? flagsArr[i + 1] : join(stateDir, "runtime-pin.json")); };
-/** Model output goes to the working tree unless told otherwise. Flip this ONE constant (and its test) once Michael confirms the default. */
-export const LIVE_WRITE_DEFAULT = true;
+/** Model output is NOT written to the working tree unless --apply is passed (Michael confirmed 2026-10-11). --out writes it to a directory instead. */
+export const LIVE_WRITE_DEFAULT = false;
 
 const stateDir = defaultStateDir();
 const kill = new KillSwitch({ stateDir });

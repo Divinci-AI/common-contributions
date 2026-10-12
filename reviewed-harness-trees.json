@@ -2,7 +2,8 @@
   "note": "Hashes of src/ (computed by the harness itself) that were reviewed and released. The publisher refuses a run record made by any other src/. This is a CONSISTENCY check against dev builds and edited copies, not security: a modified harness can skip it. Add a hash with `node scripts/record-tree-hash.mjs` at release time.",
   "trees": [
     "bcb7175ea94bae482784438fc9276fe197d9ff655eeb93a164c4ccd93c17cfba",
-    "f1a74fe60f858312fbe13a506261d5d70e13569160bafc5212167c9d0397b5e9"
+    "f1a74fe60f858312fbe13a506261d5d70e13569160bafc5212167c9d0397b5e9",
+    "cdc499b9b8b3b485e36645b4a734517d23528c314a600a95851330d2b99e9d24"
   ],
   "released": [
     {
@@ -17,6 +18,13 @@
       "date": "2026-10-11",
       "reviewed_by": "Opus 5.5 and Hermes (release review of the changes since a6997c2, then fixes: coverage gate runs for every language and refuses when it could not look; mutate temp name random; pin base cannot start with a dash)",
       "known_limits": "import resolution ignores tsconfig paths and profile.pythonPath; the 'used' heuristic counts string mentions and misses value-form use; ImportError in test output can classify a caught mutant as broke-build (under-credits, never over-credits); publish confirmation is one y/N"
+    },
+    {
+      "srcTreeHash": "cdc499b9b8b3b485e36645b4a734517d23528c314a600a95851330d2b99e9d24",
+      "commit": "8f471cf93edfefcfa0465938c8062bd63d775f65",
+      "date": "2026-10-12",
+      "reviewed_by": "Opus 5.5 and Hermes (design and build reviews of the per-project publish interval, then fixes: unreadable and out-of-calendar ledger times refused cleanly, including the top edge)",
+      "known_limits": "as the previous release, plus: a negative ledger time does not block (an ancient entry legitimately does not); a corrupt ledger line for a project now blocks that project until fixed by hand; bad ledger times on OTHER projects still bypass the three-a-day cap and the waiting-on-you check; concurrent publishes by one user read the ledger once; the dry-run interval line has no test"
     }
   ]
 }

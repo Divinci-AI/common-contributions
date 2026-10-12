@@ -19,7 +19,7 @@ The confirmations are read from your terminal (`/dev/tty`), not from flags or a 
 
 ## Things to know
 - Every pull request notifies the project's watchers and code owners.
-- GitHub's Acceptable Use Policy prohibits bulk and inauthentic automated activity. This tool refuses a second pull request to the same project within 24 hours and more than three in a day, but it counts those from a ledger on your machine, which you control; the checks it makes on GitHub itself are the project's open agent PR count, your own open agent PR, and an earlier PR waiting on you. It opens one only after you confirm, and never retries a failed write. Read the policy and keep to it.
+- GitHub's Acceptable Use Policy prohibits bulk and inauthentic automated activity. This tool refuses a second pull request to the same project within the interval that project sets (24 hours unless its opt-in file says otherwise, never less than 6) and more than three in a day across projects, but it counts those from a ledger on your machine, which you control; the checks it makes on GitHub itself are the project's open agent PR count, your own open agent PR, and an earlier PR waiting on you. It opens one only after you confirm, and never retries a failed write. Read the policy and keep to it.
 - Your git `user.name` and `user.email` are published in the commit.
 - If a project answers with changes requested and you do not reply for a week, the tool refuses to open more. Answer or close.
 - The tool refuses until the harness source you are running is a reviewed one (`reviewed-harness-trees.json`). That is a consistency check against edited copies, not security.

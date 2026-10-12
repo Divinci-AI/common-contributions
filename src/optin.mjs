@@ -149,7 +149,9 @@ export function globMatch(pattern, path) {
 
 const LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const CONTACT = /^(?:@[A-Za-z0-9-]{1,39}|[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,120}\.[A-Za-z]{2,24})$/;
-export const OPTIN_KEYS = ["version", "opt_in", "contact", "policy_url", "review_by", "paused", "task_label", "label_applied_by", "label_blocklist", "claim_required", "first_time_contributors", "max_open_agent_prs", "max_diff_lines", "allowed_paths", "forbidden_paths", "safety_critical", "safety_reason", "changelog", "disclosure", "certification"];
+/** A project may ask for 6 to 720 hours between our pull requests to it (default 24). Below 6 is not allowed; a project cannot ask for less. */
+export const MIN_HOURS_BETWEEN_PRS = [6, 720];
+export const OPTIN_KEYS = ["version", "opt_in", "contact", "policy_url", "review_by", "paused", "task_label", "label_applied_by", "label_blocklist", "claim_required", "first_time_contributors", "max_open_agent_prs", "max_diff_lines", "min_hours_between_prs", "allowed_paths", "forbidden_paths", "safety_critical", "safety_reason", "changelog", "disclosure", "certification"];
 const REQUIRED = ["version", "opt_in", "contact", "policy_url", "review_by", "label_applied_by", "disclosure", "certification"];
 const DAY = 24 * 3600 * 1000;
 
@@ -189,6 +191,7 @@ export function validateOptIn(o, { now = Date.now() } = {}) {
   const first_time_contributors = "first_time_contributors" in o ? (["allowed", "not_allowed"].includes(o.first_time_contributors) ? o.first_time_contributors : (e.push("first_time_contributors: allowed or not_allowed"), "not_allowed")) : "not_allowed";
   const max_open_agent_prs = "max_open_agent_prs" in o ? int("max_open_agent_prs", 0, 10) : 1;
   const max_diff_lines = "max_diff_lines" in o ? int("max_diff_lines", 1, 2000) : 150;
+  const min_hours_between_prs = "min_hours_between_prs" in o ? int("min_hours_between_prs", MIN_HOURS_BETWEEN_PRS[0], MIN_HOURS_BETWEEN_PRS[1]) : 24;
   const allowed_paths = list("allowed_paths", 50, validGlob, "path globs (letters, digits, . _ - / * ? only; ** as a whole segment)");
   const forbidden_paths = list("forbidden_paths", 50, validGlob, "path globs");
   const safety_critical = bool("safety_critical", false);
@@ -222,7 +225,7 @@ export function validateOptIn(o, { now = Date.now() } = {}) {
     ok: true,
     value: {
       version: 1, opt_in: true, contact: o.contact, policy_url: cleanHttpsUrl(o.policy_url), review_by: o.review_by, paused, task_label, label_applied_by, label_blocklist, claim_required,
-      first_time_contributors, max_open_agent_prs, max_diff_lines, allowed_paths, forbidden_paths, safety_critical, safety_reason: o.safety_reason ?? null, changelog: changelog ?? null, disclosure, certification,
+      first_time_contributors, max_open_agent_prs, max_diff_lines, min_hours_between_prs, allowed_paths, forbidden_paths, safety_critical, safety_reason: o.safety_reason ?? null, changelog: changelog ?? null, disclosure, certification,
     },
   };
 }

@@ -127,6 +127,7 @@ export function reviewText(first) {
   return [
     `Repository: ${plan.bound.fullName}   issue #${plan.bound.issueNumber}   base ${plan.bound.base.slice(0, 12)}   commit ${texts.commitSha.slice(0, 12)}`,
     `Project contact: ${i.contact ?? "?"}   policy: ${i.policyUrl ?? "?"}${i.safetyCritical ? `\nSAFETY-CRITICAL project${i.safetyReason ? `: ${i.safetyReason}` : ""}: tests and documentation only` : ""}`,
+    `Interval in force between our pull requests to this project: ${i.intervalHours ?? "?"} hours`,
     `Published under your name: ${plan.bound.user.name} <${plan.bound.user.email}>`,
     `Certifications given: CLA ${plan.bound.ack?.cla ? "yes" : "no"}, DCO sign-off ${plan.bound.ack?.dco ? "yes" : "no"}, flagged code reviewed ${plan.bound.ack?.flagged ? "yes" : "no"}`,
     (i.flagged?.length ?? 0) > 0 ? `Lines that touch the environment, network or processes:\n  ${i.flagged.join("\n  ")}` : "No lines touch the environment, network or processes.",

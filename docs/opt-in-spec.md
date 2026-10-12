@@ -41,6 +41,7 @@ Check yours without contacting anyone: `node src/cli.mjs optin-check .github/age
 | `first_time_contributors` | no | `allowed` or `not_allowed` (default). If not allowed, the submitter needs a merged PR in your project |
 | `max_open_agent_prs` | no | 0 to 10, default 1. The tool's own ceiling is 3 |
 | `max_diff_lines` | no | 1 to 2000, default 150. The tool's own ceiling is 400 |
+| `min_hours_between_prs` | no | 6 to 720, default 24. Hours the tool waits between its pull requests to your project. It cannot go below 6, and the three-a-day limit across all projects stays |
 | `allowed_paths` / `forbidden_paths` | no | globs: `*` and `?` inside a path segment, `**` as a whole segment; letters, digits and `. _ - /` only |
 | `safety_critical` | no | `true` for software where a subtle error could hurt people (health, crisis response, money). Requires `allowed_paths`; the publisher then also refuses any path that is not a test or documentation by its path (a directory named `test`, `tests`, `__tests__`, `spec`, `docs` or `doc`; `*.test.*`, `*.spec.*`, `*_test.*`, `test_*.py`; `*.md`, `*.rst`) |
 | `safety_reason` | no | a short plain sentence, shown to the submitter |

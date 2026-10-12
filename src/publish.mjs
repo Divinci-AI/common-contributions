@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GhError } from "./ghclient.mjs";
-import { OPTIN_PATH, globMatch, hiddenChars, isPlainText, parseOptIn } from "./optin.mjs";
+import { MIN_HOURS_BETWEEN_PRS, OPTIN_PATH, globMatch, hiddenChars, isPlainText, parseOptIn } from "./optin.mjs";
 import { issueHash, publishProblems } from "./record.mjs";
 import { isConfigFile } from "./scope.mjs";
 
@@ -72,7 +72,7 @@ const isOurPr = (p) => p.headRef.startsWith("agent/") || p.body.includes(`<!-- $
  * @returns {{ok:boolean, checks:Array<{name:string,ok:boolean,detail:string}>, bound?:object, spec?:object, diff?:object, warnings:string[]}}
  */
 export function planPublish(o) {
-  const { gh, record, key, reviewedTrees, target, issueNumber, user, repoDir, ledger = [], now = Date.now() } = o;
+  const { gh, record, key, reviewedTrees, target, issueNumber, user, repoDir, ledger = [], now = Date.now(), parse = parseOptIn } = o; // `parse` is injectable for tests only; no caller sets it
   let flags = o.flags ?? {};
   const ack = {};
   const checks = [], warnings = [];
@@ -109,7 +109,7 @@ export function planPublish(o) {
   // 4. the opt-in file, at the head sha
   const f = guard("read the opt-in file", () => gh.file(repo.id, OPTIN_PATH, head));
   if (!f) return result();
-  const parsed = parseOptIn(f.bytes, { now });
+  const parsed = parse(f.bytes, { now });
   if (!add("opt-in file is valid", parsed.ok, (parsed.errors ?? []).join("; "))) return result();
   const spec = parsed.value;
   if (!add("project is not paused", !spec.paused, "the project has paused agent contributions")) return result();
@@ -178,7 +178,17 @@ export function planPublish(o) {
   const recent = ledger.filter((l) => l.userId === user.id && now - l.at < DAY);
   const last = ledger.filter((l) => l.repoId === repo.id && l.ownerId !== undefined).at(-1);
   if (last) add("the project's owner is unchanged since your last publish here", last.ownerId === repo.ownerId, "the repository now belongs to a different owner than when you last published; the old owner's opt-in is not the new owner's consent. Ask the new owner");
-  add("not already published here in the last 24 hours", !recent.some((l) => l.repoId === repo.id), "your ledger shows a publish to this project in the last 24 hours");
+  // The per-project interval reads the WHOLE ledger (not `recent`, which is cut at 24h, or an interval over 24h would silently stop binding).
+  const hours = spec.min_hours_between_prs;
+  if (add("the project's publish interval is valid", Number.isSafeInteger(hours) && hours >= MIN_HOURS_BETWEEN_PRS[0] && hours <= MIN_HOURS_BETWEEN_PRS[1], "the interval in the opt-in file is missing or out of range")) {
+    const here = ledger.filter((l) => l.userId === user.id && l.repoId === repo.id);
+    if (add("your ledger times for this project are readable", here.every((l) => Number.isFinite(l.at)), "an entry for this project has no usable time; fix or remove it by hand, then retry")) {
+      const newest = here.reduce((m, l) => Math.max(m, l.at), -Infinity);
+      const blocked = here.length > 0 && now - newest < hours * 3600e3;
+      const detail = blocked ? `your ledger shows a publish to this project at ${new Date(newest).toISOString()}; this project asks for ${hours} hours between pull requests, so the earliest is ${new Date(newest + hours * 3600e3).toISOString()}${hours > 24 ? " (if the project raised its interval since your last publish, that applies to it too)" : ""}` : "";
+      add(`not already published here in the last ${hours} hours`, !blocked, detail);
+    }
+  }
   add("under the daily limit across projects", recent.length < TOOL_MAX_PER_DAY, `${recent.length} publishes in the last 24 hours, limit ${TOOL_MAX_PER_DAY}`);
 
   // 7b. earlier PRs of yours that are waiting on you: a project's reviewers must not be left hanging while you open more
@@ -196,7 +206,7 @@ export function planPublish(o) {
   if (spec.certification.cla !== "none") add("CLA acknowledged", flags.claSigned === true, `this project requires a ${spec.certification.cla} CLA; pass --cla-signed once YOU have signed it (it can bind your employer)`);
   if (spec.certification.dco === "signed-off-by") add("DCO certification given", flags.certifyDco === true, "this project requires a Signed-off-by line; pass --certify-dco only if YOU can certify the Developer Certificate of Origin for this change");
 
-  return result({ spec, diff, issueTitle: issue.title, info: { contact: spec.contact, policyUrl: spec.policy_url, safetyReason: spec.safety_reason, safetyCritical: spec.safety_critical, flagged }, bound: { ack, repoId: repo.id, ownerId: repo.ownerId, fullName: repo.fullName, defaultBranch: repo.defaultBranch, base: record.base, head, specBlobSha: f.blobSha, specCommit: lc?.sha ?? null, recordSha: record.recordSha, issueNumber, user: { login: user.login, id: user.id, name: user.name, email: user.email } } });
+  return result({ spec, diff, issueTitle: issue.title, info: { intervalHours: spec.min_hours_between_prs, contact: spec.contact, policyUrl: spec.policy_url, safetyReason: spec.safety_reason, safetyCritical: spec.safety_critical, flagged }, bound: { ack, repoId: repo.id, ownerId: repo.ownerId, fullName: repo.fullName, defaultBranch: repo.defaultBranch, base: record.base, head, specBlobSha: f.blobSha, specCommit: lc?.sha ?? null, recordSha: record.recordSha, issueNumber, user: { login: user.login, id: user.id, name: user.name, email: user.email } } });
 }
 
 export { isPlainText };

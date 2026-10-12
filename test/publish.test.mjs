@@ -5,13 +5,14 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createGh } from "../src/ghclient.mjs";
 import { planPublish, scanAdded, diffAgainstBase, isTestOrDocPath, MARKER_PREFIX } from "../src/publish.mjs";
+import { parseOptIn } from "../src/optin.mjs";
 import { buildRecord, issueHash } from "../src/record.mjs";
 import { tmp } from "./helpers.mjs";
 import { defaultWorld, fakeRunner } from "./fakegh.mjs";
 
 const KEY = "k".repeat(64), TREE = "t".repeat(64);
 const NOW = Date.parse("2026-10-11T12:00:00Z");
-const SPEC = { version: 1, opt_in: true, contact: "@maintainer", policy_url: "https://example.org/ai", review_by: "2027-04-01", label_applied_by: ["maintainer"], first_time_contributors: "allowed", allowed_paths: ["tests/**", "docs/**"], forbidden_paths: ["tests/secret/**"], disclosure: { mechanism: "pr_body", text: "AI assistance: yes" }, certification: { dco: "none", cla: "none" } };
+const SPEC = { version: 1, opt_in: true, min_hours_between_prs: 24, contact: "@maintainer", policy_url: "https://example.org/ai", review_by: "2027-04-01", label_applied_by: ["maintainer"], first_time_contributors: "allowed", allowed_paths: ["tests/**", "docs/**"], forbidden_paths: ["tests/secret/**"], disclosure: { mechanism: "pr_body", text: "AI assistance: yes" }, certification: { dco: "none", cla: "none" } };
 
 function localRepo() {
   const dir = tmp(); const g = (...a) => spawnSync("/usr/bin/git", ["-c", "user.email=a@b", "-c", "user.name=a", ...a], { cwd: dir, encoding: "utf8" });
@@ -29,7 +30,7 @@ function scene({ spec = SPEC, files = { "tests/new.test.ts": "export {}\n" }, wo
 }
 function plan(opts = {}) {
   const s = scene(opts);
-  const out = planPublish({ gh: createGh(fakeRunner(s.w)), record: s.record, key: KEY, reviewedTrees: [TREE], target: "acme/widgets", issueNumber: 7, user: opts.user ?? { login: "alice", id: 21, name: "Alice", email: "a@example.org" }, repoDir: s.dir, ledger: opts.ledger ?? [], now: Date.now() + 60e3, flags: opts.flags });
+  const out = planPublish({ gh: createGh(fakeRunner(s.w)), record: s.record, key: KEY, reviewedTrees: [TREE], target: "acme/widgets", issueNumber: 7, user: opts.user ?? { login: "alice", id: 21, name: "Alice", email: "a@example.org" }, repoDir: s.dir, ledger: opts.ledger ?? [], now: opts.now ?? Date.now() + 60e3, flags: opts.flags });
   return { out, s };
 }
 const failed = (out) => out.checks.filter((c) => !c.ok).map((c) => c.name);
@@ -102,6 +103,11 @@ const cases = {
   "a path that is not NFC": [{ files: { ["tests/cafe" + String.fromCharCode(0x301) + ".test.ts"]: "x\n" } }, /NFC|hidden/],
   "a file with a NUL byte": [{ files: { "tests/a.test.ts": "x" + String.fromCharCode(0) + "y\n" } }, /not valid text|binary/],
   "a file with replacement characters": [{ files: { "tests/a.test.ts": "x" + String.fromCharCode(0xfffd) + "y\n" } }, /not valid text/],
+  "a 48h-old publish with a 168h interval (longer than the 24h window)": [{ spec: { ...SPEC, min_hours_between_prs: 168 }, ledger: [{ repoId: 1001, userId: 21, at: Date.now() - 48 * 3600e3 }] }, /last 168 hours.*earliest is/],
+  "a publish 2h ago with a 6h interval": [{ spec: { ...SPEC, min_hours_between_prs: 6 }, ledger: [{ repoId: 1001, userId: 21, at: Date.now() - 2 * 3600e3 }] }, /last 6 hours/],
+  "a ledger entry for this project with no usable time": [{ ledger: [{ repoId: 1001, userId: 21, at: "yesterday" }] }, /no usable time/],
+  "a ledger entry dated in the future": [{ ledger: [{ repoId: 1001, userId: 21, at: Date.now() + 5 * 3600e3 }] }, /last 24 hours/],
+  "the newest of several entries counts, not the last line": [{ ledger: [{ repoId: 1001, userId: 21, at: Date.now() - 3600e3 }, { repoId: 1001, userId: 21, at: Date.now() - 90 * 3600e3 }] }, /last 24 hours/],
   "daily limit": [{ ledger: [1, 2, 3].map((i) => ({ repoId: 2000 + i, userId: 21, at: Date.now() - 3600e3 })) }, /daily limit/],
   "CLA required, not acknowledged": [{ spec: { ...SPEC, certification: { dco: "none", cla: "individual" } } }, /CLA acknowledged/],
   "DCO required, not certified": [{ spec: { ...SPEC, certification: { dco: "signed-off-by", cla: "none" } } }, /DCO certification/],
@@ -114,6 +120,30 @@ for (const [name, [opts, re]] of Object.entries(cases)) {
     assert.match(out.checks.filter((c) => !c.ok).map((c) => `${c.name}: ${c.detail}`).join(" | "), re);
   });
 }
+
+test("the interval allows a publish at or after the interval, to this project only", () => {
+  const H = 3600e3;
+  assert.equal(plan({ spec: { ...SPEC, min_hours_between_prs: 6 }, ledger: [{ repoId: 1001, userId: 21, at: Date.now() - 6 * H - 1000 }] }).out.ok, true);
+  assert.equal(plan({ spec: { ...SPEC, min_hours_between_prs: 168 }, ledger: [{ repoId: 1001, userId: 21, at: Date.now() - 169 * H }] }).out.ok, true);
+  assert.equal(plan({ ledger: [{ repoId: 4242, userId: 21, at: Date.now() - H }] }).out.ok, true, "another project's publish does not block this one (the daily cap still counts it)");
+  assert.equal(plan({ ledger: [{ repoId: 1001, userId: 99, at: Date.now() - H }] }).out.ok, true, "another user's entry is not ours");
+});
+
+test("planPublish itself refuses a spec whose interval is missing or out of range (even if the parser were bypassed)", () => {
+  for (const bad of [undefined, null, 5, 0, 721, 7.5, "24", NaN, Infinity]) {
+    const s = scene();
+    const out = planPublish({ gh: createGh(fakeRunner(s.w)), record: s.record, key: KEY, reviewedTrees: [TREE], target: "acme/widgets", issueNumber: 7, user: { login: "alice", id: 21, name: "Alice", email: "a@b.c" }, repoDir: s.dir, ledger: [],
+      parse: (bytes, opts) => { const r = parseOptIn(bytes, opts); return r.ok ? { ...r, value: { ...r.value, min_hours_between_prs: bad } } : r; } });
+    assert.equal(out.ok, false, String(bad));
+    assert.match(out.checks.filter((c) => !c.ok).map((c) => c.detail).join("|"), /missing or out of range/, String(bad));
+  }
+});
+
+test("the interval boundary: blocked one millisecond before it, allowed exactly at it", () => {
+  const now = Date.now() + 60e3, H = 3600e3, spec = { ...SPEC, min_hours_between_prs: 6 };
+  assert.equal(plan({ spec, now, ledger: [{ repoId: 1001, userId: 21, at: now - 6 * H + 1 }] }).out.ok, false);
+  assert.equal(plan({ spec, now, ledger: [{ repoId: 1001, userId: 21, at: now - 6 * H }] }).out.ok, true);
+});
 
 test("acknowledged CLA/DCO and reviewed flagged code pass", () => {
   assert.equal(plan({ spec: { ...SPEC, certification: { dco: "signed-off-by", cla: "individual" } }, flags: { claSigned: true, certifyDco: true } }).out.ok, true);

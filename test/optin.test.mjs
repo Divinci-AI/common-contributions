@@ -16,9 +16,10 @@ test("a minimal file passes and defaults are filled in", () => {
   const r = check(good());
   assert.equal(r.ok, true, r.errors?.join());
   assert.deepEqual([r.value.task_label, r.value.max_open_agent_prs, r.value.max_diff_lines, r.value.first_time_contributors, r.value.paused, r.value.claim_required], ["agent-ready", 1, 150, "not_allowed", false, false]);
+  assert.equal(r.value.min_hours_between_prs, 24, "absent means 24");
 });
 test("a full file passes", () => {
-  const r = check({ ...good(), paused: false, task_label: "agent ready", label_blocklist: ["good first issue", "Needs Triage"], claim_required: true, first_time_contributors: "allowed", max_open_agent_prs: 2, max_diff_lines: 300,
+  const r = check({ ...good(), paused: false, task_label: "agent ready", label_blocklist: ["good first issue", "Needs Triage"], claim_required: true, first_time_contributors: "allowed", max_open_agent_prs: 2, max_diff_lines: 300, min_hours_between_prs: 168,
     allowed_paths: ["tests/**", "docs/**", "src/*/fixtures/?.json"], forbidden_paths: [".github/**"], safety_critical: true, safety_reason: "mapping data used by responders",
     changelog: { required: true, path: "changelog/{issue}.{type}.rst" }, disclosure: { mechanism: "commit_trailer" }, certification: { dco: "signed-off-by", cla: "individual" } });
   assert.equal(r.ok, true, r.errors?.join());
@@ -41,6 +42,7 @@ const bad = {
   "task_label with a comma": (o) => (o.task_label = "a,b"), "task_label with markup": (o) => (o.task_label = "<b>"), "task_label empty": (o) => (o.task_label = ""),
   "claim_required string": (o) => (o.claim_required = "yes"), "paused string": (o) => (o.paused = "false"), "first_time_contributors other": (o) => (o.first_time_contributors = "maybe"),
   "max_open_agent_prs 11": (o) => (o.max_open_agent_prs = 11), "max_open_agent_prs -1": (o) => (o.max_open_agent_prs = -1), "max_diff_lines 0": (o) => (o.max_diff_lines = 0), "max_diff_lines 2001": (o) => (o.max_diff_lines = 2001),
+  "min_hours 5": (o) => (o.min_hours_between_prs = 5), "min_hours 0": (o) => (o.min_hours_between_prs = 0), "min_hours 721": (o) => (o.min_hours_between_prs = 721), "min_hours string": (o) => (o.min_hours_between_prs = "24"), "min_hours 7.5": (o) => (o.min_hours_between_prs = 7.5), "min_hours null": (o) => (o.min_hours_between_prs = null),
   "allowed_paths with ..": (o) => (o.allowed_paths = ["../x"]), "allowed_paths absolute": (o) => (o.allowed_paths = ["/etc/**"]), "allowed_paths with backslash": (o) => (o.allowed_paths = ["a\\b"]),
   "allowed_paths with **x": (o) => (o.allowed_paths = ["**x/a"]), "allowed_paths with brackets": (o) => (o.allowed_paths = ["[a-z]*"]), "allowed_paths with braces": (o) => (o.allowed_paths = ["{a,b}"]),
   "allowed_paths trailing slash": (o) => (o.allowed_paths = ["tests/"]), "allowed_paths double slash": (o) => (o.allowed_paths = ["a//b"]), "allowed_paths 51 entries": (o) => (o.allowed_paths = Array.from({ length: 51 }, (_, i) => "d" + i + "/**")),

@@ -4,13 +4,13 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createGh } from "../src/ghclient.mjs";
-import { dryRun, publish, ghWriter, COOLDOWN_MS, readLedger, certifyAfterReview } from "../src/execute.mjs";
+import { dryRun, publish, ghWriter, COOLDOWN_MS, readLedger, certifyAfterReview, reviewText } from "../src/execute.mjs";
 import { buildRecord, issueHash } from "../src/record.mjs";
 import { tmp } from "./helpers.mjs";
 import { defaultWorld, fakeRunner } from "./fakegh.mjs";
 
 const KEY = "k".repeat(64), TREE = "t".repeat(64);
-const SPEC = { version: 1, opt_in: true, contact: "@maintainer", policy_url: "https://example.org/ai", review_by: "2027-04-01", label_applied_by: ["maintainer"], first_time_contributors: "allowed", allowed_paths: ["tests/**"], disclosure: { mechanism: "pr_body", text: "AI assistance: yes" }, certification: { dco: "none", cla: "none" } };
+const SPEC = { version: 1, opt_in: true, min_hours_between_prs: 24, contact: "@maintainer", policy_url: "https://example.org/ai", review_by: "2027-04-01", label_applied_by: ["maintainer"], first_time_contributors: "allowed", allowed_paths: ["tests/**"], disclosure: { mechanism: "pr_body", text: "AI assistance: yes" }, certification: { dco: "none", cla: "none" } };
 const USER = { login: "alice", id: 21, name: "Alice Example", email: "alice@example.org" };
 const DESC = "I added a test for the empty list case because the helper had none.";
 
@@ -34,6 +34,8 @@ test("dry run: plans, builds the exact commit and texts, prints a token, and wri
   const s = scene();
   const r = dryRun(s.common);
   assert.equal(r.phase, "dry-run", JSON.stringify(r.plan.checks.filter((c) => !c.ok)));
+  assert.equal(r.plan.info.intervalHours, 24);
+  assert.match(reviewText(r), /Interval in force between our pull requests to this project: 24 hours/);
   assert.match(r.texts.token, /^[a-f0-9]{32}$/); assert.equal(r.texts.branch, "agent/7-test-add-coverage");
   assert.match(r.texts.body, /AI assistance: yes/); assert.match(r.texts.body, /<!-- common-ai run=/);
   assert.equal(s.w.writes.length, 0, "no POST or PATCH");

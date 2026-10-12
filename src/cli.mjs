@@ -303,7 +303,7 @@ if (cmd === "status") {
   if (!rest[0]) { console.error("usage: optin-check <.github/agent-contributions.json>"); process.exit(2); }
   const r = parseOptIn(readFileSync(rest[0]));
   if (!r.ok) { console.error(`refused:\n  ${r.errors.join("\n  ")}`); process.exit(2); }
-  console.log(`valid (tasks need the "${r.value.task_label}" label applied by ${r.value.label_applied_by.join(", ")}; at most ${r.value.max_open_agent_prs} open PR(s), ${r.value.max_diff_lines} changed lines; ${r.value.paused ? "PAUSED" : "not paused"}; review by ${r.value.review_by})`);
+  console.log(`valid (tasks need the "${r.value.task_label}" label applied by ${r.value.label_applied_by.join(", ")}; at most ${r.value.max_open_agent_prs} open PR(s), ${r.value.max_diff_lines} changed lines; ${r.value.min_hours_between_prs} hours between our PRs to you; ${r.value.paused ? "PAUSED" : "not paused"}; review by ${r.value.review_by})`);
 } else if (cmd === "publish") {
   // Dry run unless --approve <token>. Reads GitHub through YOUR gh; confirmations come from /dev/tty.
   const flag = (n) => { const i = rest.indexOf(n); return i === -1 ? undefined : rest[i + 1]; };
@@ -351,7 +351,8 @@ if (cmd === "status") {
       const r = dryRun(o);
       show(r);
       if (r.phase !== "dry-run") { console.error("\nrefused: nothing was changed."); process.exit(2); }
-      console.log(`\nproject contact: ${escapeForTerminal(r.plan.info.contact)}   policy: ${escapeForTerminal(r.plan.info.policyUrl)}${r.plan.info.safetyCritical ? `\nSAFETY-CRITICAL: ${escapeForTerminal(r.plan.info.safetyReason ?? "")} (tests and documentation only)` : ""}\n--- diff (${r.plan.diff.total} changed lines) ---\n${escapeForTerminal(r.plan.diff.patch)}\n--- commit message ---\n${escapeForTerminal(r.texts.message)}\n--- PR title ---\n${escapeForTerminal(r.texts.title)}\n--- PR body ---\n${escapeForTerminal(r.texts.body)}\n--- author published in the commit: ${escapeForTerminal(user.name)} <${escapeForTerminal(user.email)}> ---`);
+      console.log(`\ninterval in force: ${r.plan.info.intervalHours} hours between our pull requests to this project`);
+      console.log(`project contact: ${escapeForTerminal(r.plan.info.contact)}   policy: ${escapeForTerminal(r.plan.info.policyUrl)}${r.plan.info.safetyCritical ? `\nSAFETY-CRITICAL: ${escapeForTerminal(r.plan.info.safetyReason ?? "")} (tests and documentation only)` : ""}\n--- diff (${r.plan.diff.total} changed lines) ---\n${escapeForTerminal(r.plan.diff.patch)}\n--- commit message ---\n${escapeForTerminal(r.texts.message)}\n--- PR title ---\n${escapeForTerminal(r.texts.title)}\n--- PR body ---\n${escapeForTerminal(r.texts.body)}\n--- author published in the commit: ${escapeForTerminal(user.name)} <${escapeForTerminal(user.email)}> ---`);
       console.log(`\nDRY RUN ONLY: nothing was changed on GitHub.\nTo publish, wait at least 10 minutes, re-read the above, then run the same command with:\n  --approve ${r.texts.token}\nYou will be asked one y/N question on the terminal.`);
     } else {
       const r = await publish(o);

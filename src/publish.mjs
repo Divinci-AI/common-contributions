@@ -182,7 +182,7 @@ export function planPublish(o) {
   const hours = spec.min_hours_between_prs;
   if (add("the project's publish interval is valid", Number.isSafeInteger(hours) && hours >= MIN_HOURS_BETWEEN_PRS[0] && hours <= MIN_HOURS_BETWEEN_PRS[1], "the interval in the opt-in file is missing or out of range")) {
     const here = ledger.filter((l) => l.userId === user.id && l.repoId === repo.id);
-    if (add("your ledger times for this project are readable", here.every((l) => Number.isFinite(l.at) && Math.abs(l.at) <= 8.64e15), "an entry for this project has no usable time; fix or remove it by hand, then retry")) {
+    if (add("your ledger times for this project are readable", here.every((l) => Number.isFinite(l.at) && Math.abs(l.at) <= 8.64e15 - hours * 3600e3), "an entry for this project has no usable time; fix or remove it by hand, then retry")) {
       const newest = here.reduce((m, l) => Math.max(m, l.at), -Infinity);
       const blocked = here.length > 0 && now - newest < hours * 3600e3;
       const detail = blocked ? `your ledger shows a publish to this project at ${new Date(newest).toISOString()}; this project asks for ${hours} hours between pull requests, so the earliest is ${new Date(newest + hours * 3600e3).toISOString()}${hours > 24 ? " (if the project raised its interval since your last publish, that applies to it too)" : ""}` : "";

@@ -106,6 +106,7 @@ const cases = {
   "a 48h-old publish with a 168h interval (longer than the 24h window)": [{ spec: { ...SPEC, min_hours_between_prs: 168 }, ledger: [{ repoId: 1001, userId: 21, at: Date.now() - 48 * 3600e3 }] }, /last 168 hours.*earliest is/],
   "a publish 2h ago with a 6h interval": [{ spec: { ...SPEC, min_hours_between_prs: 6 }, ledger: [{ repoId: 1001, userId: 21, at: Date.now() - 2 * 3600e3 }] }, /last 6 hours/],
   "a ledger entry for this project with no usable time": [{ ledger: [{ repoId: 1001, userId: 21, at: "yesterday" }] }, /no usable time/],
+  "a ledger entry with a time beyond the calendar (1e16)": [{ ledger: [{ repoId: 1001, userId: 21, at: 1e16 }] }, /no usable time/],
   "a ledger entry dated in the future": [{ ledger: [{ repoId: 1001, userId: 21, at: Date.now() + 5 * 3600e3 }] }, /last 24 hours/],
   "the newest of several entries counts, not the last line": [{ ledger: [{ repoId: 1001, userId: 21, at: Date.now() - 3600e3 }, { repoId: 1001, userId: 21, at: Date.now() - 90 * 3600e3 }] }, /last 24 hours/],
   "daily limit": [{ ledger: [1, 2, 3].map((i) => ({ repoId: 2000 + i, userId: 21, at: Date.now() - 3600e3 })) }, /daily limit/],

@@ -4,18 +4,19 @@ You are the submitter. The pull request comes from **your** fork and **your** ac
 
 ## The flow
 1. `run-one` checks the model's change in a container and writes a **run record** (self-reported).
-2. `publish --record ... --repo owner/name --issue N --clone DIR --description-file FILE` is a **dry run**. It checks everything, prints every check, the whole diff, the exact commit message, the exact PR title and body and the author name and email that will be published, and a token. It changes nothing on GitHub.
-3. Wait at least 10 minutes. Read it again.
-4. Run the same command with `--approve <token>`. On the terminal you answer one y/N question after the diff is shown. The tool then re-checks the project three times (before forking, before pushing, before opening the PR), pushes exactly the approved commit to your fork, opens the PR and verifies what was created.
+2. `publish --record ... --repo owner/name --issue N --clone DIR --description-file FILE` runs every check, prints the whole diff, the exact commit message, the exact PR title and body and the author name and email that will be published, and then publishes. Add `--dry-run` to see all of that and change nothing (it needs no terminal).
+3. The tool re-checks the project three times (before forking, before pushing, before opening the PR), pushes exactly the planned commit to your fork, opens the PR and verifies what was created.
+
+There is no waiting period and no approval step. How a pull request is reviewed is the maintainer's decision; the tool's job is to create it, from your account, only where the project asked for it.
 
 ## What you write yourself
 The PR description (`--description-file`). The tool adds only the project's required disclosure, the issue reference and a short note that the checks ran in a container (self-reported).
 
 ## Flags you have to mean
-Three things are asked ON THE TERMINAL, never as flags, after the text is shown: that you have signed a required CLA (it can bind your employer); that you certify the Developer Certificate of Origin for this change (the tool never signs for you, and the origin of model output is unknown); and that you read any added lines that touch the environment, network or processes.
+Two things are asked ON THE TERMINAL, never as flags, after the text is shown, and only when the project's opt-in file requires them: that you have signed a CLA (it can bind your employer), and that you certify the Developer Certificate of Origin for this change (the tool never signs for you, and the origin of model output is unknown). Added lines that touch the environment, network or processes make the publish refuse unless you pass `--allow-flagged-code`, which you should do only after reading them in the printed diff.
 
-## What the confirmation is and is not
-The confirmations are read from your terminal (`/dev/tty`), not from flags or a pipe, and the diff, the lines that touch the environment or network, your published name and email, and the project's contact are printed there first. That deters a hurried human and a program that only has a pipe. It does **not** stop a program running as you that opens its own pseudo-terminal, or that calls the GitHub API with your login. Do not run this where something else has your terminal.
+## What the certification is and is not
+When a project requires a CLA or DCO, the certification is read from your terminal (`/dev/tty`), not from a flag or a pipe, after the diff and your published name and email are printed. That keeps a program that only has a pipe from certifying for you. It does **not** stop a program running as you that opens its own pseudo-terminal, or that calls the GitHub API with your login. Do not run this where something else has your terminal. A project that requires neither gets no prompt at all.
 
 ## Things to know
 - Every pull request notifies the project's watchers and code owners.

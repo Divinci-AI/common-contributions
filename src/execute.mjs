@@ -1,15 +1,14 @@
 /**
- * Dry run and real publish. The dry run changes nothing on GitHub: it plans, builds the exact commit and texts, writes a pending marker and prints a token.
- * A real publish needs: the token, a cool-down since the dry run, a y/N answer typed on /dev/tty, and a fresh plan whose token still matches
- * at three moments (before the fork, before the push, before the PR). The PR is made from the user's own account through their own gh and git.
+ * Dry run and publish. The dry run changes nothing anywhere: it plans, builds the exact commit and texts, and returns them.
+ * A publish is one step: plan, then check again that the plan has not changed at three moments (before the fork, before the push, before the PR).
+ * The only thing a person is ever asked is a CLA or DCO certification, and only when the project requires one (see certifyAfterReview).
+ * The PR is made from the user's own account through their own gh and git.
  */
 import { spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { planPublish } from "./publish.mjs";
 import { approvalToken, branchName, buildCommit, buildCommitMessage, buildPrBody, cleanTitle } from "./publisher.mjs";
-
-export const COOLDOWN_MS = 10 * 60 * 1000;
 
 export function readLedger(file) {
   if (!existsSync(file)) return [];
@@ -54,35 +53,22 @@ export function prepare(o) {
 
 export function dryRun(o) {
   const p = prepare(o);
-  if (p.phase !== "ready") return p;
-  mkdirSync(o.pendingDir, { recursive: true });
-  writeFileSync(join(o.pendingDir, p.texts.token), JSON.stringify({ at: o.now ?? Date.now(), repo: p.plan.bound.fullName, issue: o.issueNumber }) + "\n");
-  return { ...p, phase: "dry-run" };
+  return p.phase === "ready" ? { ...p, phase: "dry-run" } : p;
 }
 
 /**
- * @param o.ask       (prompt) => string, reads from /dev/tty in production
- * @param o.approve   the token from the dry run
  * @param o.write     {post, patch} from ghWriter
  * @param o.pushUrlFor (forkFullName) => url to push to
  * @param o.sleep     async (ms) => void
  */
 export async function publish(o) {
-  const { gh, write, approve, ask, pendingDir, ledgerFile, repoDir, now = Date.now(), sleep = (ms) => new Promise((r) => setTimeout(r, ms)), pushUrlFor, user } = o;
+  const { gh, write, ledgerFile, repoDir, now = Date.now(), sleep = (ms) => new Promise((r) => setTimeout(r, ms)), pushUrlFor, user } = o;
   const log = [];
   const first = prepare(o);
   if (first.phase !== "ready") return first;
   const { texts, plan } = first;
-  if (!approve || approve !== texts.token) return refuse(first, "the approval token does not match the current plan (something changed since the dry run, or the token is wrong); run the dry run again");
-  const pend = join(pendingDir, texts.token);
-  if (!existsSync(pend)) return refuse(first, "no dry run found for this token; run the dry run first");
-  const age = now - statSync(pend).mtimeMs, recorded = now - JSON.parse(readFileSync(pend, "utf8")).at;
-  if (Math.min(age, recorded) < COOLDOWN_MS) return refuse(first, `wait ${Math.ceil((COOLDOWN_MS - Math.min(age, recorded)) / 60000)} more minute(s) after the dry run and read the diff again`);
 
-  o.display?.(reviewText(first));
-  if (!/^y(es)?$/i.test((ask(`Open this pull request to ${plan.bound.fullName} from your account? [y/N] `) ?? "").trim())) return refuse(first, "not confirmed");
-
-  const recheck = (stage) => { const p = prepare(o); if (p.phase !== "ready" || p.texts.token !== texts.token) { throw new RecheckError(`${stage}: the plan changed since you approved it (${p.phase === "ready" ? "token differs" : p.plan.checks.filter((c) => !c.ok).map((c) => c.name).join(", ")}); nothing was opened`); } };
+  const recheck = (stage) => { const p = prepare(o); if (p.phase !== "ready" || p.texts.token !== texts.token) { throw new RecheckError(`${stage}: the plan changed while publishing (${p.phase === "ready" ? "token differs" : p.plan.checks.filter((c) => !c.ok).map((c) => c.name).join(", ")}); nothing was opened`); } };
   try {
     recheck("before forking");
     const forkName = `${user.login}/${plan.bound.fullName.split("/")[1]}`;
@@ -96,13 +82,13 @@ export async function publish(o) {
     const push = spawnSync("/usr/bin/git", ["-C", repoDir, "push", pushUrlFor(fork.full_name), `${texts.commitSha}:refs/heads/${texts.branch}`], { env: { PATH: "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin", HOME: process.env.HOME ?? "", GIT_TERMINAL_PROMPT: "0" }, encoding: "utf8", timeout: 120_000 });
     if (push.status !== 0) throw new Error(`git push failed: ${(push.stderr || "").trim().slice(0, 300)}`);
     const ref = gh.get(`/repos/${fork.full_name}/git/ref/heads/${texts.branch}`);
-    if (ref?.object?.sha !== texts.commitSha) throw new RecheckError("the pushed branch does not point at the approved commit; nothing was opened");
+    if (ref?.object?.sha !== texts.commitSha) throw new RecheckError("the pushed branch does not point at the planned commit; nothing was opened");
     log.push(`pushed ${texts.commitSha.slice(0, 12)} to ${fork.full_name}:${texts.branch}`);
 
     recheck("before opening the pull request");
     const pr = write.post(`/repositories/${plan.bound.repoId}/pulls`, { title: texts.title, head: `${user.login}:${texts.branch}`, base: plan.bound.defaultBranch, body: texts.body });
     const problems = [];
-    if (pr?.head?.sha !== texts.commitSha) problems.push("its head is not the approved commit");
+    if (pr?.head?.sha !== texts.commitSha) problems.push("its head is not the planned commit");
     if (pr?.title !== texts.title) problems.push("its title differs");
     if (pr?.body !== texts.body) problems.push("its body differs");
     if (pr?.state !== "open") problems.push("it is not open");
@@ -119,17 +105,16 @@ export async function publish(o) {
   }
 }
 class RecheckError extends Error {}
-const refuse = (first, reason) => ({ phase: "refused", plan: { ...first.plan, ok: false, checks: [...first.plan.checks, { name: "approval", ok: false, detail: reason }] }, texts: first.texts });
 
-/** Everything the person should see on THEIR terminal immediately before confirming (not only in the dry run's output). */
-export function reviewText(first) {
+/** What is about to happen, for the person who runs the command. `dry` says no certification was asked and nothing will be changed. */
+export function reviewText(first, { dry = false } = {}) {
   const { plan, texts } = first, i = plan.info ?? {};
   return [
     `Repository: ${plan.bound.fullName}   issue #${plan.bound.issueNumber}   base ${plan.bound.base.slice(0, 12)}   commit ${texts.commitSha.slice(0, 12)}`,
     `Project contact: ${i.contact ?? "?"}   policy: ${i.policyUrl ?? "?"}${i.safetyCritical ? `\nSAFETY-CRITICAL project${i.safetyReason ? `: ${i.safetyReason}` : ""}: tests and documentation only` : ""}`,
     `Interval in force between our pull requests to this project: ${i.intervalHours ?? "?"} hours`,
     `Published under your name: ${plan.bound.user.name} <${plan.bound.user.email}>`,
-    `Certifications given: CLA ${plan.bound.ack?.cla ? "yes" : "no"}, DCO sign-off ${plan.bound.ack?.dco ? "yes" : "no"}, flagged code reviewed ${plan.bound.ack?.flagged ? "yes" : "no"}`,
+    dry ? "Dry run: no certification was asked and nothing will be changed. A publish asks any CLA or DCO certification the project requires." : `Certifications given: CLA ${plan.bound.ack?.cla ? "yes" : "no"}, DCO sign-off ${plan.bound.ack?.dco ? "yes" : "no"}, flagged code allowed ${plan.bound.ack?.flagged ? "yes" : "no"}`,
     (i.flagged?.length ?? 0) > 0 ? `Lines that touch the environment, network or processes:\n  ${i.flagged.join("\n  ")}` : "No lines touch the environment, network or processes.",
     `--- diff (${plan.diff.total} changed lines) ---\n${plan.diff.patch}`,
     `--- commit message ---\n${texts.message}`,
@@ -138,7 +123,7 @@ export function reviewText(first) {
 }
 
 /**
- * Show the person the whole review text FIRST, then ask the certifications. The plan is first made with provisional "yes" answers purely so there is something
+ * Show the person what will be published FIRST, then ask the certifications (none are asked when the project requires none). The plan is first made with provisional "yes" answers purely so there is something
  * to show; the real plan is made after, with the person's actual answers bound into the token. Returns the flags object, or {refused} when the provisional plan failed.
  * @param o   prepare() inputs without `flags`
  * @param io  {display(text), askCertifications({spec, flagged}) => flags}

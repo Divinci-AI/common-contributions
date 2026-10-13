@@ -189,29 +189,21 @@ function fixtureWithExistingTest(issueMentionsIt) {
   return { repo, issues };
 }
 
-test("coverage gate: run-one REFUSES when an existing test imports the module and the issue does not name it", async () => {
+test("coverage check: an existing test the issue does not name WARNS, the run goes on, and the model is shown that test", async () => {
   const { repo, issues } = fixtureWithExistingTest(false);
-  requests.length = 0;
-  const r = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--host", `http://127.0.0.1:${port}`, "--no-verify"], tmp());
-  assert.equal(r.status, 2);
-  assert.match(r.stderr, /already cover a module this issue names/);
-  assert.match(r.stderr, /source-yield\.test\.ts/);
-  assert.equal(requests.length, 0, "the model must not be called");
-});
-
-test("coverage gate: the refusal also applies to --print-prompt and replay (no side door)", async () => {
-  const { repo, issues } = fixtureWithExistingTest(false);
-  const a = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--print-prompt"], tmp());
-  assert.equal(a.status, 2);
-  const b = await cli(replayArgs(issues, repo, replyFile(REPLY), ["--tool-uses", "0"]), tmp());
-  assert.equal(b.status, 2);
-  assert.ok(!existsSync(join(repo, "orchestrator/src/provenance.test.ts")));
-});
-
-test("coverage gate: once the issue names the existing test, the run proceeds and the prompt CARRIES that test", async () => {
-  const { repo, issues } = fixtureWithExistingTest(true);
   const p = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--print-prompt"], tmp());
   assert.equal(p.status, 0, p.stderr);
+  assert.match(p.stderr, /warning: existing tests already cover a module this issue names/);
+  assert.match(p.stderr, /source-yield\.test\.ts/);
+  assert.match(p.stdout, /ALREADY cover this module/); assert.match(p.stdout, /covers isSource/);
+  const r = await cli(replayArgs(issues, repo, replyFile(REPLY), ["--tool-uses", "0"]), tmp());
+  assert.equal(report(r).outcome, "ok"); assert.match(r.stderr, /warning: existing tests/);
+});
+
+test("coverage check: once the issue names the existing test there is no warning and the prompt CARRIES that test", async () => {
+  const { repo, issues } = fixtureWithExistingTest(true);
+  const p = await cli(["run-one", issues, "23", "--repo", repo, "--model", "m", "--print-prompt"], tmp());
+  assert.equal(p.status, 0, p.stderr); assert.doesNotMatch(p.stderr, /warning: existing tests/);
   assert.match(p.stdout, /ALREADY cover this module/);
   assert.match(p.stdout, /covers isSource/);
   const r = await cli(replayArgs(issues, repo, replyFile(REPLY), ["--tool-uses", "0"]), tmp());
@@ -373,9 +365,13 @@ test("run-one --task-label: a project's own label selects the task; the default 
   assert.equal(yes.status, 0, yes.stderr);
 });
 
-test("legal certifications and the flagged-code acknowledgement are never command-line flags", () => {
+test("legal certifications are never command-line flags (a person types them); flagged code is an explicit flag, off by default", () => {
   const src = readFileSync(CLI, "utf8");
-  for (const f of ["--cla-signed", "--certify-dco", "--allow-flagged-code"]) assert.ok(!src.includes(f), `${f} must not be an argv flag`);
+  for (const f of ["--cla-signed", "--certify-dco", "--sign-cla"]) assert.ok(!src.includes(f), `${f} must not be an argv flag`);
+  assert.match(src, /rest\.includes\("--allow-flagged-code"\)/);
+  assert.ok(!/--approve|COOLDOWN/.test(src), "no approval token or waiting period");
+  assert.match(src, /out\.allowFlaggedCode = allowFlagged;/, "flagged code is allowed only by the explicit flag");
+  assert.ok(!/openSync as fsOpen|openSync\("\/dev\/tty/.test(src), "the CLI itself never opens the terminal to display (a dry run must work with no terminal)");
   assert.match(src, /ttyAsk\(`[^`]*I certify/);
 });
 
@@ -391,15 +387,14 @@ function pythonIssue({ named = true } = {}) {
   writeFileSync(issues, JSON.stringify([{ number: 7, title: "t", labels: [{ name: "agent-ready" }], body }]));
   return { repo, issues };
 }
-test("coverage gate: a PYTHON issue is checked too (an existing test imports the module and the issue does not name it)", async () => {
+test("coverage check: a PYTHON issue is checked too (an existing test imports the module and the issue does not name it: warning)", async () => {
   const { repo, issues } = pythonIssue();
-  requests.length = 0;
-  const r = await cli(["run-one", issues, "7", "--repo", repo, "--model", "m", "--host", `http://127.0.0.1:${port}`, "--no-verify"], tmp());
-  assert.equal(r.status, 2);
-  assert.match(r.stderr, /already cover a module this issue names/);
+  const r = await cli(["run-one", issues, "7", "--repo", repo, "--model", "m", "--print-prompt"], tmp());
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stderr, /warning: existing tests already cover a module this issue names/);
   assert.match(r.stderr, /tests\/test_existing\.py/);
-  assert.equal(requests.length, 0);
 });
+
 test("coverage gate: an issue that names no existing source module is refused, not waved through", async () => {
   const { repo, issues } = pythonIssue({ named: false });
   requests.length = 0;

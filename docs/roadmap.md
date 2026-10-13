@@ -10,7 +10,7 @@ The homepage says "not installable yet". That line may be removed only when ALL 
 1. A person can run **one command** with **their own API key** against **a project that opted in**.
 2. The model call is **measured** (usage read from the provider's response) and **capped** before it is made.
 3. Any code the agent wrote that gets **executed** (the project's own type check and tests) runs **inside a sandbox**.
-4. Publishing is a **pull request from a fork, from an `agent/*` branch**, after a **person approved it**.
+4. Publishing is a **pull request from a fork, from an `agent/*` branch**, by a **person running the publish command from their own account**; whether the maintainers approve it is theirs to decide.
 5. **At least one maintainer** has said yes to it for their project, in writing, where we can link to it.
 
 "Installable" (a tool exists) is not "launched" (a public list of projects). The homepage says which one is true.
@@ -86,8 +86,8 @@ Exit: the escape tests are red without the container and green with it.
 ### Phase 4. Publishing and the opt-in file
 - **Publisher.** Push to a **fork**, branch `agent/<issue>-<short>`, open a PR whose body carries the disclosure line.
   One open PR per project, diff under the project's `max_diff_lines`, refuses if the project's file says `false` at the moment of publishing.
-- **A person approves** every publish (an explicit approve step; the default is no). Several target projects require a **human submitter who understands
-  the change**, so the PR is opened from that person's own fork and account, never as a bot, and "approve" means they can answer review questions.
+- **A person submits** every publish (one command, no waiting period; a CLA/DCO certification is typed by them when the project requires it). Several target projects require a **human submitter who understands
+  the change**, so the PR is opened from that person's own fork and account, never as a bot, and the submitter can answer review questions.
 - **Opt-in file.** Parser and validator for the `.github/AGENT-CONTRIBUTIONS.md` design on the site, a revocation check on the
   default branch that fails closed, and the spec as a public document. Name stays provisional.
 - **Stage 1b, our own repository:** open the real PRs from `agent/*` against `Divinci-AI/divinci-demo-pipeline-oss` (issues #25, #26) and merge them by hand.

@@ -38,9 +38,8 @@ import { loadPin, qualifyRuntime, parseTap } from "./pin.mjs";
 import { cleanup } from "./hygiene.mjs";
 import { parseOptIn } from "./optin.mjs";
 import { createGh, ghRunner } from "./ghclient.mjs";
-import { dryRun, publish, ghWriter, readLedger, certifyAfterReview } from "./execute.mjs";
+import { dryRun, publish, ghWriter, readLedger, certifyAfterReview, reviewText } from "./execute.mjs";
 import { DCO_TEXT, DCO_WARNING, CLA_WARNING } from "./legal.mjs";
-import { openSync as fsOpen, writeSync as fsWrite, closeSync as fsClose } from "node:fs";
 import { ttyAsk, escapeForTerminal } from "./tty.mjs";
 import { fileURLToPath } from "node:url";
 import { mkdirSync } from "node:fs";
@@ -125,7 +124,7 @@ if (cmd === "status") {
   const sibling = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".test.ts")).map((f) => join(dir, f)).filter((f) => statSync(f).size < 4000).sort()[0] : undefined;
   const styleExample = sibling ? readFileSync(sibling, "utf8").slice(0, 3000) : "";
 
-  // COVERAGE GATE: every existing test that already covers a module this issue names (imports it, or reaches it through other files and uses it) must be NAMED in the issue.
+  // COVERAGE CHECK: existing tests that already cover a module this issue names (imports it, or reaches it through other files and uses it) are shown to the model; a warning is printed when the issue does not name them.
   // (An issue was once filed for a module that already had tests, because the check looked only for a sibling file.)
   const existingTests = {};
   const unacknowledged = [];
@@ -141,8 +140,8 @@ if (cmd === "status") {
     process.exit(2);
   }
   if (unacknowledged.length > 0) {
-    console.error(`refusing: existing tests already cover a module this issue names (they import it, or reach it and use it), and the issue does not mention them:\n  ${unacknowledged.join("\n  ")}\nName them in the issue (and say what they do not cover), then re-run.`);
-    process.exit(2);
+    // How an issue is written is the maintainer's business, so this warns and goes on. The model is still shown these tests (existingTests above).
+    console.error(`warning: existing tests already cover a module this issue names (they import it, or reach it and use it), and the issue does not mention them:\n  ${unacknowledged.join("\n  ")}\nThe model is shown them. Naming them in the issue (and what they do not cover) makes the task clearer.`);
   }
 
   if (flags.includes("--print-prompt")) {
@@ -305,9 +304,9 @@ if (cmd === "status") {
   if (!r.ok) { console.error(`refused:\n  ${r.errors.join("\n  ")}`); process.exit(2); }
   console.log(`valid (tasks need the "${r.value.task_label}" label applied by ${r.value.label_applied_by.join(", ")}; at most ${r.value.max_open_agent_prs} open PR(s), ${r.value.max_diff_lines} changed lines; ${r.value.min_hours_between_prs} hours between our PRs to you; ${r.value.paused ? "PAUSED" : "not paused"}; review by ${r.value.review_by})`);
 } else if (cmd === "publish") {
-  // Dry run unless --approve <token>. Reads GitHub through YOUR gh; confirmations come from /dev/tty.
+  // Publishes in one step (plan, check again at fork/push/PR, open); --dry-run only shows. Reads GitHub through YOUR gh; a CLA/DCO certification, if the project requires one, is typed on /dev/tty.
   const flag = (n) => { const i = rest.indexOf(n); return i === -1 ? undefined : rest[i + 1]; };
-  const need = (n) => { const v = flag(n); if (!v) { console.error(`usage: publish --record <run-record.json> --repo owner/name --issue N --clone <dir> --description-file <file> [--approve <token>] [--title T] [--gh /abs/gh]`); process.exit(2); } return v; };
+  const need = (n) => { const v = flag(n); if (!v) { console.error(`usage: publish --record <run-record.json> --repo owner/name --issue N --clone <dir> --description-file <file> [--dry-run] [--allow-flagged-code] [--title T] [--gh /abs/gh]`); process.exit(2); } return v; };
   const recordFile = need("--record"), target = need("--repo"), issueNumber = Number(need("--issue")), clone = need("--clone"), descFile = need("--description-file");
   const harnessDir = fileURLToPath(new URL("..", import.meta.url));
   const ghPath = flag("--gh") ?? spawnSync("/usr/bin/which", ["gh"], { encoding: "utf8" }).stdout.trim();
@@ -323,38 +322,38 @@ if (cmd === "status") {
     if (!user.name || !user.email) throw new Error("set git user.name and user.email in the clone: they are published in the commit");
     const reviewedTrees = JSON.parse(readFileSync(join(harnessDir, "reviewed-harness-trees.json"), "utf8")).trees;
     const ledgerFile = join(stateDir, "published.jsonl");
-    // Certifications are given ON THE TERMINAL, once per run, AFTER the review text is shown. They are never flags.
+    // A CLA/DCO certification is typed ON THE TERMINAL by the person, once per run, AFTER the text is shown, and only when the project requires one. It is never a flag.
     const memo = {};
-    const askCertifications = ({ spec, flagged }) => {
+    const allowFlagged = rest.includes("--allow-flagged-code"), dry = rest.includes("--dry-run");
+    const askCertifications = ({ spec }) => {
       const out = {};
       if (spec.certification.cla !== "none") { out.claSigned = ttyAsk(`\nThis project requires a ${spec.certification.cla} CLA.\n${CLA_WARNING}\nType "I have signed" to confirm: `) === "I have signed"; }
       if (spec.certification.dco === "signed-off-by") { out.certifyDco = ttyAsk(`\n${DCO_TEXT}\n\n${DCO_WARNING}\nType "I certify" to add Signed-off-by: ${user.name} <${user.email}>: `) === "I certify"; }
-      if (flagged.length > 0) { out.allowFlaggedCode = ttyAsk(`\nThese added lines touch the environment, network or processes (listed above):\n  ${escapeForTerminal(flagged.slice(0, 30).join("\n  "))}\nType "I read them" to continue: `) === "I read them"; }
+      out.allowFlaggedCode = allowFlagged;
       return out;
     };
     const certify = () => memo.flags ?? {};
     const o = {
       gh, write: ghWriter(runner), record: JSON.parse(readFileSync(recordFile, "utf8")), key, reviewedTrees, target, issueNumber, user, repoDir: clone,
       ledger: readLedger(ledgerFile), flags: certify,
-      descriptionText: readFileSync(descFile, "utf8"), titleOverride: flag("--title"), pendingDir: join(stateDir, "publish-pending"), ledgerFile,
-      pushUrlFor: (fork) => `https://github.com/${fork}.git`, ask: ttyAsk, approve: flag("--approve"),
-      display: (text) => { const fd = fsOpen("/dev/tty", "w"); try { fsWrite(fd, `\n${escapeForTerminal(text)}\n\n`); } finally { fsClose(fd); } },
+      descriptionText: readFileSync(descFile, "utf8"), titleOverride: flag("--title"), ledgerFile,
+      pushUrlFor: (fork) => `https://github.com/${fork}.git`,
     };
     const show = (r) => {
       for (const c of r.plan.checks) console.log(`${c.ok ? "ok  " : "FAIL"} ${c.name}${c.ok ? "" : ": " + escapeForTerminal(c.detail)}`);
       for (const w of r.plan.warnings ?? []) console.log(`warn ${escapeForTerminal(w)}`);
     };
-    const reviewed = certifyAfterReview({ ...o, flags: undefined }, { display: (t) => o.display(t), askCertifications });
-    if (reviewed.refused) { show(reviewed.refused); console.error("\nrefused: nothing was changed."); process.exit(2); }
-    memo.flags = reviewed.flags;
-    if (!o.approve) {
-      const r = dryRun(o);
+    const print = (text) => console.log(`\n${escapeForTerminal(text)}\n`);
+    if (dry) {
+      const r = dryRun({ ...o, flags: { claSigned: true, certifyDco: true, allowFlaggedCode: allowFlagged } });
       show(r);
       if (r.phase !== "dry-run") { console.error("\nrefused: nothing was changed."); process.exit(2); }
-      console.log(`\ninterval in force: ${r.plan.info.intervalHours} hours between our pull requests to this project`);
-      console.log(`project contact: ${escapeForTerminal(r.plan.info.contact)}   policy: ${escapeForTerminal(r.plan.info.policyUrl)}${r.plan.info.safetyCritical ? `\nSAFETY-CRITICAL: ${escapeForTerminal(r.plan.info.safetyReason ?? "")} (tests and documentation only)` : ""}\n--- diff (${r.plan.diff.total} changed lines) ---\n${escapeForTerminal(r.plan.diff.patch)}\n--- commit message ---\n${escapeForTerminal(r.texts.message)}\n--- PR title ---\n${escapeForTerminal(r.texts.title)}\n--- PR body ---\n${escapeForTerminal(r.texts.body)}\n--- author published in the commit: ${escapeForTerminal(user.name)} <${escapeForTerminal(user.email)}> ---`);
-      console.log(`\nDRY RUN ONLY: nothing was changed on GitHub.\nTo publish, wait at least 10 minutes, re-read the above, then run the same command with:\n  --approve ${r.texts.token}\nYou will be asked one y/N question on the terminal.`);
+      print(reviewText(r, { dry: true }));
+      console.log("DRY RUN: nothing was changed. Run the same command without --dry-run to publish.");
     } else {
+      const reviewed = certifyAfterReview({ ...o, flags: undefined }, { display: print, askCertifications });
+      if (reviewed.refused) { show(reviewed.refused); console.error("\nrefused: nothing was changed."); process.exit(2); }
+      memo.flags = reviewed.flags;
       const r = await publish(o);
       if (r.phase === "published") { console.log(r.log.join("\n")); console.log("published."); }
       else { show(r); console.error(r.error ? `\naborted: ${r.error}\n${(r.log ?? []).join("\n")}` : "\nrefused: nothing was changed."); process.exit(2); }

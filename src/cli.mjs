@@ -337,7 +337,7 @@ if (cmd === "status") {
     const certify = () => memo.flags ?? {};
     const o = {
       gh, write: ghWriter(runner), record: JSON.parse(readFileSync(recordFile, "utf8")), key, reviewedTrees, target, issueNumber, user, repoDir: clone,
-      ledger: readLedger(ledgerFile), flags: certify,
+      ledger: readLedger(ledgerFile), ledgerFn: () => readLedger(ledgerFile), lockFile: join(stateDir, "publish.lock"), flags: certify,
       descriptionText: readFileSync(descFile, "utf8"), titleOverride: flag("--title"), ledgerFile,
       pushUrlFor: (fork) => `https://github.com/${fork}.git`,
     };

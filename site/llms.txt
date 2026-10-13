@@ -15,7 +15,7 @@ There are no rewards of any kind.
 - Replay mode, where an agent's reply passes through the same checks
 - A hosted-model adapter (Workers AI) held to a spend cap by the ledger; its cost has not yet been reconciled against the provider's own figure
 - A local-model adapter, tested against a mock only
-- An opt-in file format with a strict checker, and a pull request publisher that opens a PR only from the submitter's own fork after they confirm; both are tested only against a fake GitHub and no project has adopted the file
+- An opt-in file format with a strict checker, and a pull request publisher that opens a PR only from the submitter's own fork, in one command; both are tested only against a fake GitHub and no project has adopted the file
 - A container verifier for model-written code (tested on macOS with OrbStack only; skipped if a person passes a flag to run on the host)
 
 ## What does not exist

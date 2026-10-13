@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createGh } from "../src/ghclient.mjs";
@@ -28,7 +28,7 @@ function scene({ spec = SPEC, world: wmod } = {}) {
   return { w, dir, bare, state, common, g };
 }
 
-test("dry run: plans, builds the exact commit and texts, and writes NOTHING to GitHub, the remote or the disk", () => {
+test("dry run: plans, builds the exact commit and texts, and writes NOTHING to GitHub, the remote or the state directory", () => {
   const s = scene();
   const r = dryRun(s.common);
   assert.equal(r.phase, "dry-run", JSON.stringify(r.plan.checks.filter((c) => !c.ok)));
@@ -186,4 +186,24 @@ test("what the person was shown must be what is published: the diff or the proje
   assert.equal(diffChanged.phase, "refused"); assert.equal(s.w.writes.length, 0);
   const fine = await publish({ ...s.common, expect });
   assert.equal(fine.phase, "published", fine.error);
+});
+
+test("another publish by the same person wrote the ledger after this run's plan: the next re-check sees it and nothing is opened", async () => {
+  const s = scene(); let n = 0;
+  const entry = { repoId: 1001, userId: 21, at: s.common.now - 1000 };
+  const ledgerFn = () => (++n === 1 ? [] : [entry]); // the first plan sees an empty ledger, the re-check before forking sees the other run's entry
+  const r = await publish({ ...s.common, ledgerFn });
+  assert.equal(r.phase, "aborted"); assert.match(r.error, /before forking/); assert.equal(s.w.writes.length, 0);
+});
+test("one publish at a time: a held lock refuses with zero writes and is left alone; a finished publish releases it; a stale lock is ignored", async () => {
+  const s = scene(); const lockFile = join(s.state, "publish.lock");
+  writeFileSync(lockFile, "999\n");
+  const held = await publish({ ...s.common, lockFile });
+  assert.equal(held.phase, "refused"); assert.ok(held.plan.checks.some((c) => c.name === "no other publish is running" && !c.ok));
+  assert.equal(s.w.writes.length, 0); assert.ok(existsSync(lockFile), "the other run's lock is not removed by the refused run");
+  const old = new Date(Date.now() - 20 * 60e3); utimesSync(lockFile, old, old);
+  const done = await publish({ ...s.common, lockFile });
+  assert.equal(done.phase, "published", done.error); assert.ok(!existsSync(lockFile), "released when finished");
+  const s2 = scene(); const failing = await publish({ ...s2.common, lockFile: join(s2.state, "l"), pushUrlFor: () => "/nonexistent/repo.git" });
+  assert.equal(failing.phase, "aborted"); assert.ok(!existsSync(join(s2.state, "l")), "released even when the publish aborts");
 });

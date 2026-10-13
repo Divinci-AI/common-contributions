@@ -5,7 +5,7 @@
  * The PR is made from the user's own account through their own gh and git.
  */
 import { spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeSync } from "node:fs";
 import { dirname } from "node:path";
 import { planPublish } from "./publish.mjs";
 import { approvalToken, branchName, buildCommit, buildCommitMessage, buildPrBody, cleanTitle } from "./publisher.mjs";
@@ -30,7 +30,8 @@ export function ghWriter(run) {
 /** Plan + texts + the exact commit + the token. Pure with respect to GitHub (reads only) and the remote repository (writes nothing). */
 export function prepare(o) {
   const { record, repoDir, descriptionText, titleOverride } = o;
-  const plan = planPublish(o);
+  // The ledger is read again at every plan (not once at startup), so an entry another run appended meanwhile is seen by the next re-check.
+  const plan = planPublish(typeof o.ledgerFn === "function" ? { ...o, ledger: o.ledgerFn() } : o);
   if (!plan.ok) return { phase: "refused", plan };
   // The answers may be a callback (the CLI asks after the review text); the plan resolved it, so the commit must use the same answers.
   const flags = typeof o.flags === "function" ? o.flags({ spec: plan.spec, flagged: plan.info.flagged, user: o.user }) : (o.flags ?? {});
@@ -62,6 +63,21 @@ export function dryRun(o) {
  * @param o.sleep     async (ms) => void
  */
 export async function publish(o) {
+  if (!o.lockFile) return runPublish(o);
+  // One publish at a time per person: two runs started together would both read an empty ledger and both pass the interval and daily limit.
+  mkdirSync(dirname(o.lockFile), { recursive: true });
+  try { if (Date.now() - statSync(o.lockFile).mtimeMs > LOCK_STALE_MS) unlinkSync(o.lockFile); } catch { /* none */ }
+  let fd;
+  try { fd = openSync(o.lockFile, "wx"); writeSync(fd, `${process.pid}\n`); } catch (e) {
+    if (e?.code !== "EEXIST") throw e;
+    const first = prepare(o);
+    return { phase: "refused", plan: { ...(first.plan ?? {}), ok: false, checks: [...(first.plan?.checks ?? []), { name: "no other publish is running", ok: false, detail: `another publish holds ${o.lockFile}; wait for it to finish (a lock older than ${LOCK_STALE_MS / 60000} minutes is ignored)` }] }, texts: first.texts };
+  }
+  try { return await runPublish(o); } finally { try { closeSync(fd); } catch { /* closed */ } try { unlinkSync(o.lockFile); } catch { /* gone */ } }
+}
+const LOCK_STALE_MS = 15 * 60 * 1000;
+
+async function runPublish(o) {
   const { gh, write, ledgerFile, repoDir, now = Date.now(), sleep = (ms) => new Promise((r) => setTimeout(r, ms)), pushUrlFor, user } = o;
   const log = [];
   const first = prepare(o);

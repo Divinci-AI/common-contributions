@@ -98,7 +98,7 @@ test("every surface agrees with status.json about the container verifier", () =>
   if (built) assert.ok(/macOS/.test(row.detail) && /home folder/.test(row.detail) && /allow-host-execution/.test(row.detail), "the row keeps its limits: one runtime, what an escape reaches, the host flag");
 });
 
-test("opt-in file and publishing rows agree with every surface, and say they have never run on GitHub", () => {
+test("opt-in file and publishing rows agree with every surface, and say they have run on GitHub only on our own repository", () => {
   const publishing = rows.find((r) => r.piece === "Pull request publishing"), optin = rows.find((r) => r.piece === "Maintainer opt-in file");
   assert.ok(publishing && optin);
   const llms = read("site/llms.txt"), agent = JSON.parse(read("site/agent.json")), note = read("site/harness/index.html"), home = read("site/index.html");
@@ -107,8 +107,8 @@ test("opt-in file and publishing rows agree with every surface, and say they hav
     assert.equal(row.status, "partly-built");
     assert.ok(/fake GitHub|pretend|No project has adopted/i.test(row.detail), `${row.piece} keeps its limit`);
   }
-  assert.ok(/never run against GitHub/i.test(publishing.detail) && /no pull request has been opened/i.test(publishing.detail));
+  assert.ok(/run for real once/i.test(publishing.detail) && /our own demo repository/i.test(publishing.detail) && /no pull request has been opened anywhere else/i.test(publishing.detail) && !/never run against GitHub/i.test(publishing.detail));
   assert.ok(/fake GitHub/i.test(exists) && !/publishing/i.test(doesNot));
-  assert.ok(!agent.does_not_exist.includes("pr-publishing") && agent.exists.includes("pr-publisher-fake-github-only"));
-  assert.ok(/a real pull request/i.test(note.match(/what_does_not: .*/)[0]) && /pretend GitHub/.test(home) && !/Publishing a contribution\./.test(home));
+  assert.ok(!agent.does_not_exist.includes("pr-publishing") && agent.exists.includes("pr-publisher-run-once-on-our-own-repo"));
+  assert.ok(/anyone else's project/i.test(note.match(/what_does_not: .*/)[0]) && /pretend GitHub/.test(home) && /one real pull request, on our own demo repository/.test(home) && !/Publishing a contribution\./.test(home));
 });

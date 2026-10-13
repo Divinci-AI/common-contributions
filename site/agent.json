@@ -13,7 +13,7 @@
     "hosted-model-adapter",
     "container-verifier",
     "opt-in-file-checker",
-    "pr-publisher-fake-github-only"
+    "pr-publisher-run-once-on-our-own-repo"
   ],
   "does_not_exist": [
     "installer"

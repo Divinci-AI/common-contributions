@@ -108,14 +108,22 @@ export function createGh(run) {
     priorWork(id, n) {
       const { items, truncated } = pages(`/repositories/${id}/issues/${n}/timeline`, { maxPages: 5 });
       if (truncated) throw new GhError("too many timeline events to read; refusing");
+      const rank = { merged: 3, open: 2, closed: 1 };
       const seen = new Map();
       for (const e of items) {
-        const i = e?.event === "cross-referenced" ? e.source?.issue : null;
-        if (!i || !i.pull_request || !Number.isInteger(i.number)) continue;
-        const merged = typeof i.pull_request.merged_at === "string";
-        const state = merged ? "merged" : i.state === "open" ? "open" : "closed";
+        if (e?.event !== "cross-referenced") continue;
+        const i = e.source?.issue;
+        if (e.source?.type !== "issue" || !i || typeof i !== "object") throw new GhError("timeline: a cross-reference has an unexpected shape");
+        if (!("pull_request" in i)) continue; // a plain issue mentioning this one is not a pull request
+        need(i, { number: "n", state: "s", repository: "o" }, "timeline cross-reference");
+        if (!Number.isInteger(i.repository.id)) throw new GhError("timeline cross-reference: repository id missing");
+        if (i.state !== "open" && i.state !== "closed") throw new GhError("timeline cross-reference: unexpected state");
+        const merged = typeof i.pull_request?.merged_at === "string";
+        const state = merged ? "merged" : i.state;
+        const key = `${i.repository.id}:${i.number}`;
+        if (seen.has(key) && rank[seen.get(key).state] >= rank[state]) continue;
         const url = typeof i.html_url === "string" && /^https:\/\/github\.com\//.test(i.html_url) ? i.html_url : null;
-        seen.set(i.number, { number: i.number, state, title: String(i.title ?? "").slice(0, 120), by: typeof i.user?.login === "string" ? i.user.login : null, url, repoId: i.repository?.id ?? null });
+        seen.set(key, { number: i.number, state, title: String(i.title ?? "").slice(0, 120), by: typeof i.user?.login === "string" ? i.user.login : null, url, repoId: i.repository.id, sameRepo: i.repository.id === id });
       }
       return [...seen.values()];
     },

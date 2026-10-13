@@ -8,7 +8,7 @@ import { tmp } from "./helpers.mjs";
 
 const CLI = fileURLToPath(new URL("../src/cli.mjs", import.meta.url));
 const FAKEGH = pathToFileURL(fileURLToPath(new URL("./fakegh.mjs", import.meta.url))).href;
-const PR = (n, state) => ({ event: "cross-referenced", source: { type: "issue", issue: { number: n, state, title: "fix it", html_url: `https://github.com/acme/widgets/pull/${n}`, user: { login: "bob" }, pull_request: {} } } });
+const PR = (n, state, o = {}) => ({ event: "cross-referenced", source: { type: "issue", issue: { number: n, state, title: o.title ?? "fix it", html_url: `https://github.com/acme/widgets/pull/${n}`, user: { login: "bob" }, repository: { id: o.repoId ?? 1001 }, pull_request: {} } } });
 
 function setup(timeline) {
   const gh = join(tmp(), "gh");
@@ -46,4 +46,13 @@ test("run-one: a GitHub error refuses (never reads as 'none found'); without --g
   assert.match(r2.err, /warning: prior-work check skipped/);
   const r3 = await run(none, [], ["--provider", "workers-ai"]);
   assert.equal(r3.status, 2); assert.match(r3.err, /hosted run spends money, so it needs the prior-work check/);
+});
+
+test("run-one: a hostile title is escaped on screen; a mention from another repository is a note, not a stop", async () => {
+  const s = setup([PR(40, "open", { title: "ok\u001b]0;pwned\u0007\u202e" }), PR(41, "open", { repoId: 9999 })]);
+  const r = await run(s, ["--github", "acme/widgets", "--gh", s.gh]);
+  assert.equal(r.status, 2); assert.doesNotMatch(r.err, /[\u001b\u0007\u202e]/); assert.match(r.err, /\\u\{1b\}/);
+  const t = setup([PR(41, "open", { repoId: 9999 })]);
+  const q = await run(t, ["--github", "acme/widgets", "--gh", t.gh]);
+  assert.match(q.err, /other repositories mention #7 \(not blocking\)/); assert.match(q.err, /prior work: none found/);
 });

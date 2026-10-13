@@ -96,12 +96,19 @@ test("compare reports a renamed file's previous name too, so an upstream rename 
   assert.deepEqual(gh.compare(1, "a".repeat(40), "b".repeat(40)).files, ["new/a.ts", "tests/new.test.ts"]);
 });
 
-test("priorWork: only pull requests that mention the issue, one entry per PR, merged beats open/closed, urls must be github.com", () => {
-  const pr = (n, state, merged, url) => ({ event: "cross-referenced", source: { type: "issue", issue: { number: n, state, title: "t", html_url: url ?? `https://github.com/a/b/pull/${n}`, user: { login: "bob" }, pull_request: merged ? { merged_at: "2026-01-01T00:00:00Z" } : {} } } });
-  const { gh } = setup((w) => (w.timeline = [pr(1, "open"), pr(1, "open"), pr(2, "closed", true), pr(3, "closed"), pr(4, "open", false, "javascript:alert(1)"), { event: "commented" }]));
+test("priorWork: only pull requests; keyed by repository AND number so a same-numbered PR elsewhere cannot overwrite; the strongest state wins", () => {
+  const pr = (n, state, o = {}) => ({ event: "cross-referenced", source: { type: "issue", issue: { number: n, state, title: "t", html_url: o.url ?? `https://github.com/a/b/pull/${n}`, user: { login: "bob" }, repository: { id: o.repo ?? 1001 }, pull_request: o.merged ? { merged_at: "2026-01-01T00:00:00Z" } : {} } } });
+  const { gh } = setup((w) => (w.timeline = [pr(1, "open"), pr(1, "closed", { repo: 5 }), pr(1, "closed"), pr(2, "closed", { merged: true }), pr(3, "closed"), pr(4, "open", { url: "javascript:alert(1)" }), { event: "commented" }, { event: "cross-referenced", source: { type: "issue", issue: { number: 9, state: "open", title: "plain issue", repository: { id: 1001 } } } }]));
   const got = gh.priorWork(1001, 7);
-  assert.deepEqual(got.map((x) => [x.number, x.state]), [[1, "open"], [2, "merged"], [3, "closed"], [4, "open"]]);
-  assert.equal(got[3].url, null);
+  assert.deepEqual(got.map((x) => [x.number, x.state, x.sameRepo]), [[1, "open", true], [1, "closed", false], [2, "merged", true], [3, "closed", true], [4, "open", true]]);
+  assert.equal(got[4].url, null);
+});
+test("priorWork: a surprise is a refusal, never a skip (bad shape, unknown state, no repository id)", () => {
+  const ev = (mod) => { const e = { event: "cross-referenced", source: { type: "issue", issue: { number: 1, state: "open", title: "t", repository: { id: 1001 }, pull_request: {} } } }; mod(e); return e; };
+  for (const [name, mod, re] of [["no source issue", (e) => delete e.source.issue, /unexpected shape/], ["unknown state", (e) => (e.source.issue.state = "weird"), /unexpected state/], ["no state", (e) => delete e.source.issue.state, /"state"/], ["no repository", (e) => delete e.source.issue.repository, /"repository"/], ["no repo id", (e) => (e.source.issue.repository = {}), /repository id/]]) {
+    const { gh } = setup((w) => (w.timeline = [ev(mod)]));
+    assert.throws(() => gh.priorWork(1001, 7), re, name);
+  }
 });
 test("priorWork: more than five pages of timeline is a refusal, not a partial answer", () => {
   const { gh } = setup((w) => (w.timeline = Array.from({ length: 501 }, () => ({ event: "commented" }))));

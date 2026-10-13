@@ -123,7 +123,9 @@ if (cmd === "status") {
     if (slug && ghPath) {
       let prior;
       try { const g = createGh(ghRunner(ghPath)); prior = g.priorWork(g.repo(slug).id, Number(numberArg)); } catch (e) { console.error(`refusing: could not look for earlier work on #${numberArg} (${e.message}); fix that or run without --github`); process.exit(2); }
-      const d = describePrior(prior);
+      const d = describePrior(prior.filter((x) => x.sameRepo));
+      const elsewhere = describePrior(prior.filter((x) => !x.sameRepo)).lines;
+      if (elsewhere.length > 0) console.error(`note: pull requests in other repositories mention #${numberArg} (not blocking):\n  ${elsewhere.join("\n  ")}`);
       if (d.closedLines.length > 0) console.error(`note: closed (not merged) pull requests mention #${numberArg}:\n  ${d.closedLines.join("\n  ")}`);
       if (d.lines.length > 0) {
         console.error(`prior work: pull requests already mention #${numberArg}:\n  ${d.lines.join("\n  ")}`);

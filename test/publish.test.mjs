@@ -8,6 +8,7 @@ import { planPublish, scanAdded, diffAgainstBase, isTestOrDocPath, MARKER_PREFIX
 import { parseOptIn } from "../src/optin.mjs";
 import { buildRecord, issueHash } from "../src/record.mjs";
 import { tmp } from "./helpers.mjs";
+import { reviewText } from "../src/execute.mjs";
 import { defaultWorld, fakeRunner } from "./fakegh.mjs";
 
 const KEY = "k".repeat(64), TREE = "t".repeat(64);
@@ -205,7 +206,7 @@ test("a binary file in the record is refused, not counted as zero lines", () => 
   assert.throws(() => diffAgainstBase(dir, base, { "tests/blob.bin": "\u0000\u0001\u0002binary" + "\u0000".repeat(50) }), /binary/);
 });
 
-const xref = (n, state, by, extra = {}) => ({ event: "cross-referenced", source: { type: "issue", issue: { number: n, state, title: `fix #7 (${n})`, html_url: `https://github.com/acme/widgets/pull/${n}`, user: { login: by }, pull_request: extra.merged ? { merged_at: "2026-10-01T00:00:00Z" } : {} } } });
+const xref = (n, state, by, extra = {}) => ({ event: "cross-referenced", source: { type: "issue", issue: { number: n, state, title: `fix #7 (${n})`, html_url: `https://github.com/acme/widgets/pull/${n}`, user: { login: by }, repository: { id: extra.repoId ?? 1001 }, pull_request: extra.merged ? { merged_at: "2026-10-01T00:00:00Z" } : {} } } });
 
 test("prior work: someone else's OPEN pull request for this issue refuses the publish, naming it", () => {
   const { out } = plan({ world: (w) => (w.timeline = [xref(40, "open", "bob")]) });
@@ -216,10 +217,27 @@ test("prior work: your own open PR, a merged one and a closed one do not refuse;
   const { out } = plan({ world: (w) => (w.timeline = [xref(41, "open", "alice"), xref(42, "closed", "bob", { merged: true }), xref(43, "closed", "carol")]) });
   assert.deepEqual(failed(out), []);
   assert.deepEqual(out.info.priorWork.map((l) => l.slice(0, 12)), ["#41 open by ", "#42 merged b"]);
+  assert.match(reviewText({ plan: out, texts: { commitSha: "c".repeat(40), message: "m", title: "t", body: "b" } }), /Other pull requests that mention this issue \(not blocking\):\n  #41 open by alice/);
 });
 test("prior work: plain issue mentions (not pull requests) are ignored; an unreadable timeline refuses", () => {
   const { out } = plan({ world: (w) => (w.timeline = [{ event: "cross-referenced", source: { type: "issue", issue: { number: 9, state: "open", title: "x", user: { login: "bob" } } } }, { event: "labeled" }]) });
   assert.deepEqual(failed(out), []);
   const bad = plan({ world: (w) => (w.fail["/timeline"] = 500) });
   assert.ok(failed(bad.out).some((n) => /look for earlier work on this issue/.test(n)), JSON.stringify(bad.out.checks.filter((c) => !c.ok)));
+});
+
+test("prior work: an open PR in ANOTHER repository that mentions the issue cannot block a publish; it is shown", () => {
+  const { out } = plan({ world: (w) => (w.timeline = [xref(40, "open", "bob", { repoId: 9999 })]) });
+  assert.deepEqual(failed(out), []);
+  assert.match(out.info.priorWork[0], /^\(another repository\) #40 open by bob/);
+});
+test("prior work: a same-numbered closed PR elsewhere does not hide the real open one", () => {
+  const { out } = plan({ world: (w) => (w.timeline = [xref(40, "open", "bob"), xref(40, "closed", "mallory", { repoId: 9999 })]) });
+  assert.deepEqual(failed(out), ["no one else has an open pull request for this issue"]);
+});
+test("prior work: the review says so when the lookup was not made", () => {
+  const { out } = plan();
+  const t = (info) => reviewText({ plan: { ...out, info }, texts: { commitSha: "c".repeat(40), message: "m", title: "t", body: "b" } });
+  assert.match(t({ ...out.info, priorWork: null }), /Earlier work on this issue: not checked/);
+  assert.match(t({ ...out.info, priorWork: [] }), /No other pull request mentions this issue\./);
 });

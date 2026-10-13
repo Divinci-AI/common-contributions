@@ -14,6 +14,7 @@ export function defaultWorld() {
     lastEditedAt: null,
     pulls: [],
     searchTotal: 0,
+    timeline: [],
     closedIssuesByCreator: {},
     fail: {}, // path substring -> http status
     writes: [], forkName: "alice/widgets", forkCreated: false, pushedSha: null, prCreated: null, prClosed: false,
@@ -55,6 +56,7 @@ export function fakeRunner(world) {
     }
     if (path.startsWith(`/repositories/${r.id}/commits?`)) return ok([{ sha: world.optinCommit.sha, commit: { committer: { date: world.optinCommit.date } }, author: { login: world.optinCommit.authorLogin, type: world.optinCommit.authorType } }]);
     if (path.startsWith("/users/")) { const u = world.users[decodeURIComponent(path.slice(7))]; return u ? ok(u) : err(404); }
+    if (path.startsWith(`/repositories/${r.id}/issues/${world.issue.number}/timeline`)) return ok(page(world.timeline, path));
     if (path.startsWith(`/repositories/${r.id}/issues/${world.issue.number}/events`)) return ok(page(world.events, path));
     if (path.startsWith(`/repositories/${r.id}/issues/${world.issue.number}`)) return ok(world.issue);
     const pm = /^\/repositories\/(\d+)\/pulls\/(\d+)(\/reviews)?/.exec(path);

@@ -95,3 +95,15 @@ test("compare reports a renamed file's previous name too, so an upstream rename 
   const gh = createGh(() => ({ status: 0, stdout: JSON.stringify({ status: "ahead", files: [{ filename: "new/a.ts", previous_filename: "tests/new.test.ts" }] }), stderr: "" }));
   assert.deepEqual(gh.compare(1, "a".repeat(40), "b".repeat(40)).files, ["new/a.ts", "tests/new.test.ts"]);
 });
+
+test("priorWork: only pull requests that mention the issue, one entry per PR, merged beats open/closed, urls must be github.com", () => {
+  const pr = (n, state, merged, url) => ({ event: "cross-referenced", source: { type: "issue", issue: { number: n, state, title: "t", html_url: url ?? `https://github.com/a/b/pull/${n}`, user: { login: "bob" }, pull_request: merged ? { merged_at: "2026-01-01T00:00:00Z" } : {} } } });
+  const { gh } = setup((w) => (w.timeline = [pr(1, "open"), pr(1, "open"), pr(2, "closed", true), pr(3, "closed"), pr(4, "open", false, "javascript:alert(1)"), { event: "commented" }]));
+  const got = gh.priorWork(1001, 7);
+  assert.deepEqual(got.map((x) => [x.number, x.state]), [[1, "open"], [2, "merged"], [3, "closed"], [4, "open"]]);
+  assert.equal(got[3].url, null);
+});
+test("priorWork: more than five pages of timeline is a refusal, not a partial answer", () => {
+  const { gh } = setup((w) => (w.timeline = Array.from({ length: 501 }, () => ({ event: "commented" }))));
+  assert.throws(() => gh.priorWork(1001, 7), /too many timeline events/);
+});

@@ -101,6 +101,24 @@ export function createGh(run) {
       if (truncated) throw new GhError("too many issue events to read; refusing");
       return items.map((e) => ({ event: e.event, rename: e.rename ?? null, label: e.label?.name ?? null, actorId: e.actor?.id ?? null, actorType: e.actor?.type ?? null, actorLogin: e.actor?.login ?? null, createdAt: e.created_at }));
     },
+    /**
+     * Pull requests that mention the issue (from its timeline), by anyone: what a person or another agent has already put forward.
+     * A mention is not proof of a fix, so callers treat this as "look before you spend", not as a verdict.
+     */
+    priorWork(id, n) {
+      const { items, truncated } = pages(`/repositories/${id}/issues/${n}/timeline`, { maxPages: 5 });
+      if (truncated) throw new GhError("too many timeline events to read; refusing");
+      const seen = new Map();
+      for (const e of items) {
+        const i = e?.event === "cross-referenced" ? e.source?.issue : null;
+        if (!i || !i.pull_request || !Number.isInteger(i.number)) continue;
+        const merged = typeof i.pull_request.merged_at === "string";
+        const state = merged ? "merged" : i.state === "open" ? "open" : "closed";
+        const url = typeof i.html_url === "string" && /^https:\/\/github\.com\//.test(i.html_url) ? i.html_url : null;
+        seen.set(i.number, { number: i.number, state, title: String(i.title ?? "").slice(0, 120), by: typeof i.user?.login === "string" ? i.user.login : null, url, repoId: i.repository?.id ?? null });
+      }
+      return [...seen.values()];
+    },
     /** GraphQL: when the issue's title or body was last edited by anyone (null if never). */
     issueLastEdit(owner, name, n) {
       const q = "query($o:String!,$n:String!,$i:Int!){repository(owner:$o,name:$n){issue(number:$i){lastEditedAt}}}";

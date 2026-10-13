@@ -3,6 +3,7 @@
 You are the submitter. The pull request comes from **your** fork and **your** account, and you answer the review. Several projects ban autonomous agent pull requests outright; this tool is built so that a person is always the submitter.
 
 ## The flow
+0. Before any tokens are spent, `run-one ... --github owner/name --gh /abs/gh` reads the issue's timeline and stops if a pull request already mentions the issue (`--ignore-prior-work` to go on anyway; a hosted run requires the check or `--no-prior-work-check`). `publish` repeats the look and refuses while someone else has an open pull request for the issue. A mention is not proof the work is done, which is why a person can override it for `run-one`; it only reads GitHub through your own `gh`.
 1. `run-one` checks the model's change in a container and writes a **run record** (self-reported).
 2. `publish --record ... --repo owner/name --issue N --clone DIR --description-file FILE` runs every check, prints the whole diff, the exact commit message, the exact PR title and body and the author name and email that will be published, and then publishes. Add `--dry-run` to see all of that and change nothing (it needs no terminal).
 3. The tool re-checks the project three times (before forking, before pushing, before opening the PR), pushes exactly the planned commit to your fork, opens the PR and verifies what was created.

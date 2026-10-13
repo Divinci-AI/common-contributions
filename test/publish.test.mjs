@@ -204,3 +204,22 @@ test("a binary file in the record is refused, not counted as zero lines", () => 
   const { dir, base } = localRepo();
   assert.throws(() => diffAgainstBase(dir, base, { "tests/blob.bin": "\u0000\u0001\u0002binary" + "\u0000".repeat(50) }), /binary/);
 });
+
+const xref = (n, state, by, extra = {}) => ({ event: "cross-referenced", source: { type: "issue", issue: { number: n, state, title: `fix #7 (${n})`, html_url: `https://github.com/acme/widgets/pull/${n}`, user: { login: by }, pull_request: extra.merged ? { merged_at: "2026-10-01T00:00:00Z" } : {} } } });
+
+test("prior work: someone else's OPEN pull request for this issue refuses the publish, naming it", () => {
+  const { out } = plan({ world: (w) => (w.timeline = [xref(40, "open", "bob")]) });
+  assert.deepEqual(failed(out), ["no one else has an open pull request for this issue"]);
+  assert.match(out.checks.find((c) => !c.ok).detail, /#40 open by bob/);
+});
+test("prior work: your own open PR, a merged one and a closed one do not refuse; merged and open ones are shown in the review info", () => {
+  const { out } = plan({ world: (w) => (w.timeline = [xref(41, "open", "alice"), xref(42, "closed", "bob", { merged: true }), xref(43, "closed", "carol")]) });
+  assert.deepEqual(failed(out), []);
+  assert.deepEqual(out.info.priorWork.map((l) => l.slice(0, 12)), ["#41 open by ", "#42 merged b"]);
+});
+test("prior work: plain issue mentions (not pull requests) are ignored; an unreadable timeline refuses", () => {
+  const { out } = plan({ world: (w) => (w.timeline = [{ event: "cross-referenced", source: { type: "issue", issue: { number: 9, state: "open", title: "x", user: { login: "bob" } } } }, { event: "labeled" }]) });
+  assert.deepEqual(failed(out), []);
+  const bad = plan({ world: (w) => (w.fail["/timeline"] = 500) });
+  assert.ok(failed(bad.out).some((n) => /look for earlier work on this issue/.test(n)), JSON.stringify(bad.out.checks.filter((c) => !c.ok)));
+});

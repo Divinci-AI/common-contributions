@@ -38,6 +38,7 @@ import { loadPin, qualifyRuntime, parseTap } from "./pin.mjs";
 import { cleanup } from "./hygiene.mjs";
 import { parseOptIn } from "./optin.mjs";
 import { createGh, ghRunner } from "./ghclient.mjs";
+import { describePrior } from "./prior.mjs";
 import { dryRun, publish, ghWriter, readLedger, certifyAfterReview, reviewText } from "./execute.mjs";
 import { DCO_TEXT, DCO_WARNING, CLA_WARNING } from "./legal.mjs";
 import { ttyAsk, escapeForTerminal } from "./tty.mjs";
@@ -114,6 +115,23 @@ if (cmd === "status") {
 
   const task = selectRunnableTasks(JSON.parse(readFileSync(issuesFile, "utf8")), flag("--task-label", "agent-ready")).find((t) => String(t.number) === String(numberArg));
   if (!task) { console.error(`issue #${numberArg} is not runnable (needs the agent-ready label and a parseable one-file scope)`); process.exit(2); }
+
+  // PRIOR WORK: before any tokens are spent, look at the issue's timeline for pull requests that already mention it. Needs the project on GitHub (--github owner/name) and gh (--gh /abs/gh).
+  // A hosted model costs money, so for that provider the check is required unless a person turns it off. A mention is not proof, so a person can go on with --ignore-prior-work.
+  {
+    const slug = flag("--github"), ghPath = flag("--gh"), hosted0 = provider === "workers-ai" && !replyFile;
+    if (slug && ghPath) {
+      let prior;
+      try { const g = createGh(ghRunner(ghPath)); prior = g.priorWork(g.repo(slug).id, Number(numberArg)); } catch (e) { console.error(`refusing: could not look for earlier work on #${numberArg} (${e.message}); fix that or run without --github`); process.exit(2); }
+      const d = describePrior(prior);
+      if (d.closedLines.length > 0) console.error(`note: closed (not merged) pull requests mention #${numberArg}:\n  ${d.closedLines.join("\n  ")}`);
+      if (d.lines.length > 0) {
+        console.error(`prior work: pull requests already mention #${numberArg}:\n  ${d.lines.join("\n  ")}`);
+        if (!flags.includes("--ignore-prior-work")) { console.error("refusing: read those first; if this is still worth doing, run again with --ignore-prior-work"); process.exit(2); }
+      } else console.error(`prior work: none found for #${numberArg}`);
+    } else if (hosted0 && !flags.includes("--no-prior-work-check")) { console.error("refusing: a hosted run spends money, so it needs the prior-work check (--github owner/name --gh /abs/gh), or --no-prior-work-check to skip it"); process.exit(2); }
+    else console.error("warning: prior-work check skipped (no --github and --gh); someone may already have a pull request for this issue");
+  }
 
   // Context the model gets: the source file(s) the issue names, and one small existing test as a style example.
   // Every language the coverage gate understands, so a Python or .js issue is checked rather than waved through.

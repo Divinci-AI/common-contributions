@@ -9,7 +9,7 @@ import { parseOptIn } from "../src/optin.mjs";
 import { buildRecord, issueHash } from "../src/record.mjs";
 import { tmp } from "./helpers.mjs";
 import { reviewText } from "../src/execute.mjs";
-import { defaultWorld, fakeRunner } from "./fakegh.mjs";
+import { defaultWorld, fakeRunner, crossRef } from "./fakegh.mjs";
 
 const KEY = "k".repeat(64), TREE = "t".repeat(64);
 const NOW = Date.parse("2026-10-11T12:00:00Z");
@@ -206,7 +206,7 @@ test("a binary file in the record is refused, not counted as zero lines", () => 
   assert.throws(() => diffAgainstBase(dir, base, { "tests/blob.bin": "\u0000\u0001\u0002binary" + "\u0000".repeat(50) }), /binary/);
 });
 
-const xref = (n, state, by, extra = {}) => ({ event: "cross-referenced", source: { type: "issue", issue: { number: n, state, title: `fix #7 (${n})`, html_url: `https://github.com/acme/widgets/pull/${n}`, user: { login: by }, repository: { id: extra.repoId ?? 1001 }, pull_request: extra.merged ? { merged_at: "2026-10-01T00:00:00Z" } : {} } } });
+const xref = (n, state, by, extra = {}) => crossRef(n, extra.merged ? "merged" : state, { by, repoId: extra.repoId });
 
 test("prior work: someone else's OPEN pull request for this issue refuses the publish, naming it", () => {
   const { out } = plan({ world: (w) => (w.timeline = [xref(40, "open", "bob")]) });
@@ -220,9 +220,9 @@ test("prior work: your own open PR, a merged one and a closed one do not refuse;
   assert.match(reviewText({ plan: out, texts: { commitSha: "c".repeat(40), message: "m", title: "t", body: "b" } }), /Other pull requests that mention this issue \(not blocking\):\n  #41 open by alice/);
 });
 test("prior work: plain issue mentions (not pull requests) are ignored; an unreadable timeline refuses", () => {
-  const { out } = plan({ world: (w) => (w.timeline = [{ event: "cross-referenced", source: { type: "issue", issue: { number: 9, state: "open", title: "x", user: { login: "bob" } } } }, { event: "labeled" }]) });
+  const { out } = plan({ world: (w) => (w.timeline = [crossRef(9, "open", { asIssue: true })]) });
   assert.deepEqual(failed(out), []);
-  const bad = plan({ world: (w) => (w.fail["/timeline"] = 500) });
+  const bad = plan({ world: (w) => (w.failTimeline = true) });
   assert.ok(failed(bad.out).some((n) => /look for earlier work on this issue/.test(n)), JSON.stringify(bad.out.checks.filter((c) => !c.ok)));
 });
 

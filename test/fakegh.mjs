@@ -14,12 +14,18 @@ export function defaultWorld() {
     lastEditedAt: null,
     pulls: [],
     searchTotal: 0,
-    timeline: [],
+    timeline: [], // GraphQL cross-reference nodes: { __typename: "CrossReferencedEvent", source: { __typename, number, state, merged, title, url, repository: { databaseId }, author: { login } } }
     closedIssuesByCreator: {},
     fail: {}, // path substring -> http status
     writes: [], forkName: "alice/widgets", forkCreated: false, pushedSha: null, prCreated: null, prClosed: false,
   };
 }
+
+/** A GraphQL cross-reference node as GitHub returns it. state: open | closed | merged (a plain issue when asIssue). */
+export const crossRef = (number, state = "open", { by = "bob", repoId = 1001, title = "fix it", url, asIssue = false } = {}) => ({
+  __typename: "CrossReferencedEvent",
+  source: asIssue ? { __typename: "Issue", number } : { __typename: "PullRequest", number, state: state.toUpperCase(), merged: state === "merged", title, url: url ?? `https://github.com/acme/widgets/pull/${number}`, repository: { databaseId: repoId }, author: { login: by } },
+});
 
 export function fakeRunner(world) {
   const ok = (v) => ({ status: 0, stdout: JSON.stringify(v), stderr: "" });
@@ -44,6 +50,11 @@ export function fakeRunner(world) {
       return err(404);
     }
     for (const [k, code] of Object.entries(world.fail)) if (path.includes(k)) return err(code);
+    if (args[1] === "graphql" && args.some((a) => a.includes("timelineItems"))) {
+      if (world.failTimeline) return err(500);
+      const f = fields(args), start = f.after ? Number(f.after) : 0, nodes = world.timeline.slice(start, start + 100);
+      return ok({ data: { repository: { issue: { timelineItems: { pageInfo: { hasNextPage: start + 100 < world.timeline.length, endCursor: String(start + 100) }, nodes } } } } });
+    }
     if (args[1] === "graphql") return ok({ data: { repository: { issue: { lastEditedAt: world.lastEditedAt } } } });
     const r = world.repo;
     if (path === `/repos/${r.full_name}`) return ok(r);
@@ -56,7 +67,6 @@ export function fakeRunner(world) {
     }
     if (path.startsWith(`/repositories/${r.id}/commits?`)) return ok([{ sha: world.optinCommit.sha, commit: { committer: { date: world.optinCommit.date } }, author: { login: world.optinCommit.authorLogin, type: world.optinCommit.authorType } }]);
     if (path.startsWith("/users/")) { const u = world.users[decodeURIComponent(path.slice(7))]; return u ? ok(u) : err(404); }
-    if (path.startsWith(`/repositories/${r.id}/issues/${world.issue.number}/timeline`)) return ok(page(world.timeline, path));
     if (path.startsWith(`/repositories/${r.id}/issues/${world.issue.number}/events`)) return ok(page(world.events, path));
     if (path.startsWith(`/repositories/${r.id}/issues/${world.issue.number}`)) return ok(world.issue);
     const pm = /^\/repositories\/(\d+)\/pulls\/(\d+)(\/reviews)?/.exec(path);

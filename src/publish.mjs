@@ -177,7 +177,7 @@ export function planPublish(o) {
     if (total !== undefined) add("search finds no more agent PRs than the limit allows", total < Math.min(spec.max_open_agent_prs, TOOL_MAX_OPEN), `search reports ${total} (advisory; it lags)`);
   }
   // Someone else already has an open pull request mentioning this issue: a second one buries the first for the maintainer. (Merged or closed mentions are shown, not refused.)
-  const prior = guard("look for earlier work on this issue", () => gh.priorWork(repo.id, issueNumber));
+  const prior = guard("look for earlier work on this issue", () => gh.priorWork(repo.ownerLogin, repo.fullName.split("/")[1], issueNumber, repo.id));
   if (prior) {
     const theirs = othersOpen(prior, { userLogin: user.login });
     add("no one else has an open pull request for this issue", theirs.length === 0, describePrior(theirs).lines.join("; "));

@@ -122,7 +122,7 @@ if (cmd === "status") {
     const slug = flag("--github"), ghPath = flag("--gh"), hosted0 = provider === "workers-ai" && !replyFile;
     if (slug && ghPath) {
       let prior;
-      try { const g = createGh(ghRunner(ghPath)); prior = g.priorWork(g.repo(slug).id, Number(numberArg)); } catch (e) { console.error(`refusing: could not look for earlier work on #${numberArg} (${e.message}); fix that or run without --github`); process.exit(2); }
+      try { const g = createGh(ghRunner(ghPath)); const rp = g.repo(slug); prior = g.priorWork(rp.ownerLogin, rp.fullName.split("/")[1], Number(numberArg), rp.id); } catch (e) { console.error(`refusing: could not look for earlier work on #${numberArg} (${e.message}); fix that or run without --github`); process.exit(2); }
       const d = describePrior(prior.filter((x) => x.sameRepo));
       const elsewhere = describePrior(prior.filter((x) => !x.sameRepo)).lines;
       if (elsewhere.length > 0) console.error(`note: pull requests in other repositories mention #${numberArg} (not blocking):\n  ${elsewhere.join("\n  ")}`);

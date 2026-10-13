@@ -102,30 +102,39 @@ export function createGh(run) {
       return items.map((e) => ({ event: e.event, rename: e.rename ?? null, label: e.label?.name ?? null, actorId: e.actor?.id ?? null, actorType: e.actor?.type ?? null, actorLogin: e.actor?.login ?? null, createdAt: e.created_at }));
     },
     /**
-     * Pull requests that mention the issue (from its timeline), by anyone: what a person or another agent has already put forward.
-     * A mention is not proof of a fix, so callers treat this as "look before you spend", not as a verdict.
+     * Pull requests that mention the issue, by anyone, asked of the server as cross-reference events ONLY (so comment spam on the issue cannot
+     * push this past a page limit). A mention is not proof of a fix: callers treat this as "look before you spend", not as a verdict.
      */
-    priorWork(id, n) {
-      const { items, truncated } = pages(`/repositories/${id}/issues/${n}/timeline`, { maxPages: 5 });
-      if (truncated) throw new GhError("too many timeline events to read; refusing");
+    priorWork(owner, name, n, repoId) {
+      const q = "query($o:String!,$n:String!,$i:Int!,$after:String){repository(owner:$o,name:$n){issue(number:$i){timelineItems(itemTypes:[CROSS_REFERENCED_EVENT],first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{__typename ... on CrossReferencedEvent{source{__typename ... on PullRequest{number state merged title url repository{databaseId} author{login}}}}}}}}}";
       const rank = { merged: 3, open: 2, closed: 1 };
       const seen = new Map();
-      for (const e of items) {
-        if (e?.event !== "cross-referenced") continue;
-        const i = e.source?.issue;
-        if (e.source?.type !== "issue" || !i || typeof i !== "object") throw new GhError("timeline: a cross-reference has an unexpected shape");
-        if (!("pull_request" in i)) continue; // a plain issue mentioning this one is not a pull request
-        need(i, { number: "n", state: "s", repository: "o" }, "timeline cross-reference");
-        if (!Number.isInteger(i.repository.id)) throw new GhError("timeline cross-reference: repository id missing");
-        if (i.state !== "open" && i.state !== "closed") throw new GhError("timeline cross-reference: unexpected state");
-        const merged = typeof i.pull_request?.merged_at === "string";
-        const state = merged ? "merged" : i.state;
-        const key = `${i.repository.id}:${i.number}`;
-        if (seen.has(key) && rank[seen.get(key).state] >= rank[state]) continue;
-        const url = typeof i.html_url === "string" && /^https:\/\/github\.com\//.test(i.html_url) ? i.html_url : null;
-        seen.set(key, { number: i.number, state, title: String(i.title ?? "").slice(0, 120), by: typeof i.user?.login === "string" ? i.user.login : null, url, repoId: i.repository.id, sameRepo: i.repository.id === id });
+      let after = null;
+      for (let page = 0; ; page++) {
+        if (page >= 5) throw new GhError("too many pull requests mention this issue to read; refusing");
+        const r = run(["api", "graphql", "-f", `query=${q}`, "-f", `o=${owner}`, "-f", `n=${name}`, "-F", `i=${n}`, ...(after ? ["-f", `after=${after}`] : [])]);
+        if (r.status !== 0) throw new GhError("GitHub GraphQL request failed (prior work)");
+        let j; try { j = JSON.parse(r.stdout); } catch { throw new GhError("GraphQL answer is not JSON (prior work)"); }
+        if (j?.errors) throw new GhError("GraphQL answered with errors (prior work)");
+        const t = j?.data?.repository?.issue?.timelineItems;
+        if (!t || !Array.isArray(t.nodes) || typeof t.pageInfo?.hasNextPage !== "boolean") throw new GhError("GraphQL answer has no timeline (prior work)");
+        for (const node of t.nodes) {
+          const src = node?.source;
+          if (node?.__typename !== "CrossReferencedEvent" || !src || typeof src !== "object") throw new GhError("timeline: a cross-reference has an unexpected shape");
+          if (src.__typename !== "PullRequest") continue; // a plain issue mentioning this one is not a pull request
+          need(src, { number: "n", state: "s", title: "s", repository: "o" }, "timeline cross-reference");
+          if (!Number.isInteger(src.repository.databaseId)) throw new GhError("timeline cross-reference: repository id missing");
+          if (!["OPEN", "CLOSED", "MERGED"].includes(src.state)) throw new GhError("timeline cross-reference: unexpected state");
+          const state = src.state.toLowerCase();
+          const key = `${src.repository.databaseId}:${src.number}`;
+          if (seen.has(key) && rank[seen.get(key).state] >= rank[state]) continue;
+          const url = typeof src.url === "string" && /^https:\/\/github\.com\//.test(src.url) ? src.url : null;
+          seen.set(key, { number: src.number, state, title: src.title.slice(0, 120), by: typeof src.author?.login === "string" ? src.author.login : null, url, repoId: src.repository.databaseId, sameRepo: src.repository.databaseId === repoId });
+        }
+        if (!t.pageInfo.hasNextPage) return [...seen.values()];
+        after = t.pageInfo.endCursor;
+        if (typeof after !== "string" || after.length === 0) throw new GhError("GraphQL answer has no cursor (prior work)");
       }
-      return [...seen.values()];
     },
     /** GraphQL: when the issue's title or body was last edited by anyone (null if never). */
     issueLastEdit(owner, name, n) {

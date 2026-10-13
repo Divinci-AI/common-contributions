@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createGh, ghRunner, GhError } from "../src/ghclient.mjs";
-import { defaultWorld, fakeRunner } from "./fakegh.mjs";
+import { defaultWorld, fakeRunner, crossRef } from "./fakegh.mjs";
 
 const setup = (mod) => { const w = defaultWorld(); mod?.(w); return { w, gh: createGh(fakeRunner(w)) }; };
 
@@ -97,20 +97,24 @@ test("compare reports a renamed file's previous name too, so an upstream rename 
 });
 
 test("priorWork: only pull requests; keyed by repository AND number so a same-numbered PR elsewhere cannot overwrite; the strongest state wins", () => {
-  const pr = (n, state, o = {}) => ({ event: "cross-referenced", source: { type: "issue", issue: { number: n, state, title: "t", html_url: o.url ?? `https://github.com/a/b/pull/${n}`, user: { login: "bob" }, repository: { id: o.repo ?? 1001 }, pull_request: o.merged ? { merged_at: "2026-01-01T00:00:00Z" } : {} } } });
-  const { gh } = setup((w) => (w.timeline = [pr(1, "open"), pr(1, "closed", { repo: 5 }), pr(1, "closed"), pr(2, "closed", { merged: true }), pr(3, "closed"), pr(4, "open", { url: "javascript:alert(1)" }), { event: "commented" }, { event: "cross-referenced", source: { type: "issue", issue: { number: 9, state: "open", title: "plain issue", repository: { id: 1001 } } } }]));
-  const got = gh.priorWork(1001, 7);
+  const { gh } = setup((w) => (w.timeline = [crossRef(1, "open"), crossRef(1, "closed", { repoId: 5 }), crossRef(1, "closed"), crossRef(2, "merged"), crossRef(3, "closed"), crossRef(4, "open", { url: "javascript:alert(1)" }), crossRef(9, "open", { asIssue: true })]));
+  const got = gh.priorWork("acme", "widgets", 7, 1001);
   assert.deepEqual(got.map((x) => [x.number, x.state, x.sameRepo]), [[1, "open", true], [1, "closed", false], [2, "merged", true], [3, "closed", true], [4, "open", true]]);
   assert.equal(got[4].url, null);
 });
-test("priorWork: a surprise is a refusal, never a skip (bad shape, unknown state, no repository id)", () => {
-  const ev = (mod) => { const e = { event: "cross-referenced", source: { type: "issue", issue: { number: 1, state: "open", title: "t", repository: { id: 1001 }, pull_request: {} } } }; mod(e); return e; };
-  for (const [name, mod, re] of [["no source issue", (e) => delete e.source.issue, /unexpected shape/], ["unknown state", (e) => (e.source.issue.state = "weird"), /unexpected state/], ["no state", (e) => delete e.source.issue.state, /"state"/], ["no repository", (e) => delete e.source.issue.repository, /"repository"/], ["no repo id", (e) => (e.source.issue.repository = {}), /repository id/]]) {
-    const { gh } = setup((w) => (w.timeline = [ev(mod)]));
-    assert.throws(() => gh.priorWork(1001, 7), re, name);
+test("priorWork: a surprise is a refusal, never a skip (bad node, unknown state, no repository id, GraphQL errors, not JSON)", () => {
+  for (const [name, mod, re] of [["no source", (n) => delete n.source, /unexpected shape/], ["unknown state", (n) => (n.source.state = "WEIRD"), /unexpected state/], ["no state", (n) => delete n.source.state, /"state"/], ["no repository", (n) => delete n.source.repository, /"repository"/], ["no repo id", (n) => (n.source.repository = {}), /repository id/], ["wrong node type", (n) => (n.__typename = "Other"), /unexpected shape/]]) {
+    const n = crossRef(1, "open"); mod(n);
+    const { gh } = setup((w) => (w.timeline = [n]));
+    assert.throws(() => gh.priorWork("acme", "widgets", 7, 1001), re, name);
   }
+  assert.throws(() => createGh(() => ({ status: 0, stdout: JSON.stringify({ errors: [{ message: "x" }] }), stderr: "" })).priorWork("a", "b", 1, 1), /errors/);
+  assert.throws(() => createGh(() => ({ status: 0, stdout: "<html>", stderr: "" })).priorWork("a", "b", 1, 1), /not JSON/);
+  assert.throws(() => createGh(() => ({ status: 1, stdout: "", stderr: "" })).priorWork("a", "b", 1, 1), /request failed/);
 });
-test("priorWork: more than five pages of timeline is a refusal, not a partial answer", () => {
-  const { gh } = setup((w) => (w.timeline = Array.from({ length: 501 }, () => ({ event: "commented" }))));
-  assert.throws(() => gh.priorWork(1001, 7), /too many timeline events/);
+test("priorWork: comment spam cannot push it past a limit (the server returns cross-references only); more than 500 pull requests is a refusal", () => {
+  const { gh } = setup((w) => (w.timeline = Array.from({ length: 250 }, (_, i) => crossRef(i + 1, "closed"))));
+  assert.equal(gh.priorWork("acme", "widgets", 7, 1001).length, 250);
+  const big = setup((w) => (w.timeline = Array.from({ length: 501 }, (_, i) => crossRef(i + 1, "closed")))).gh;
+  assert.throws(() => big.priorWork("acme", "widgets", 7, 1001), /too many pull requests/);
 });

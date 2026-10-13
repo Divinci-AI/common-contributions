@@ -5,10 +5,11 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 import { tmp } from "./helpers.mjs";
+import { crossRef } from "./fakegh.mjs";
 
 const CLI = fileURLToPath(new URL("../src/cli.mjs", import.meta.url));
 const FAKEGH = pathToFileURL(fileURLToPath(new URL("./fakegh.mjs", import.meta.url))).href;
-const PR = (n, state, o = {}) => ({ event: "cross-referenced", source: { type: "issue", issue: { number: n, state, title: o.title ?? "fix it", html_url: `https://github.com/acme/widgets/pull/${n}`, user: { login: "bob" }, repository: { id: o.repoId ?? 1001 }, pull_request: {} } } });
+const PR = (n, state, o = {}) => crossRef(n, state, o);
 
 function setup(timeline) {
   const gh = join(tmp(), "gh");
@@ -55,4 +56,10 @@ test("run-one: a hostile title is escaped on screen; a mention from another repo
   const t = setup([PR(41, "open", { repoId: 9999 })]);
   const q = await run(t, ["--github", "acme/widgets", "--gh", t.gh]);
   assert.match(q.err, /other repositories mention #7 \(not blocking\)/); assert.match(q.err, /prior work: none found/);
+});
+
+test("run-one: --no-prior-work-check lets a hosted run past the missing check (it then meets the next refusal: no credentials)", async () => {
+  const s = setup([]);
+  const r = await run(s, ["--no-prior-work-check"], ["--provider", "workers-ai"]);
+  assert.doesNotMatch(r.err, /hosted run spends money/); assert.match(r.err, /warning: prior-work check skipped/);
 });

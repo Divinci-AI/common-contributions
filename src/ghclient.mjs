@@ -102,23 +102,30 @@ export function createGh(run) {
       return items.map((e) => ({ event: e.event, rename: e.rename ?? null, label: e.label?.name ?? null, actorId: e.actor?.id ?? null, actorType: e.actor?.type ?? null, actorLogin: e.actor?.login ?? null, createdAt: e.created_at }));
     },
     /**
-     * Pull requests that mention the issue, by anyone, asked of the server as cross-reference events ONLY (so comment spam on the issue cannot
-     * push this past a page limit). A mention is not proof of a fix: callers treat this as "look before you spend", not as a verdict.
+     * Pull requests that mention the issue, by anyone, asked of the server as cross-reference events only (so comment spam cannot push this
+     * past a page limit). Returns { prs, incomplete, unreadable }:
+     *  - incomplete: more than 500 cross-references exist (issues in other repositories count; a stranger can create them), so the list may miss some;
+     *  - unreadable: mentions this token may not read (private or SAML-restricted repositories).
+     * Both are SHOWN, never a refusal: this is "look before you spend", and a hostile or restricted mention must not block a maintainer's task for good.
+     * A mention is not proof of a fix. Pull requests linked only through the Development sidebar (no textual mention) are not seen.
      */
     priorWork(owner, name, n, repoId) {
       const q = "query($o:String!,$n:String!,$i:Int!,$after:String){repository(owner:$o,name:$n){issue(number:$i){timelineItems(itemTypes:[CROSS_REFERENCED_EVENT],first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{__typename ... on CrossReferencedEvent{source{__typename ... on PullRequest{number state merged title url repository{databaseId} author{login}}}}}}}}}";
       const rank = { merged: 3, open: 2, closed: 1 };
       const seen = new Map();
-      let after = null;
+      let after = null, unreadable = 0;
       for (let page = 0; ; page++) {
-        if (page >= 5) throw new GhError("too many pull requests mention this issue to read; refusing");
+        if (page >= 5) return { prs: [...seen.values()], incomplete: true, unreadable };
         const r = run(["api", "graphql", "-f", `query=${q}`, "-f", `o=${owner}`, "-f", `n=${name}`, "-F", `i=${n}`, ...(after ? ["-f", `after=${after}`] : [])]);
-        if (r.status !== 0) throw new GhError("GitHub GraphQL request failed (prior work)");
-        let j; try { j = JSON.parse(r.stdout); } catch { throw new GhError("GraphQL answer is not JSON (prior work)"); }
-        if (j?.errors) throw new GhError("GraphQL answered with errors (prior work)");
+        // gh exits 1 when GraphQL reports errors, but may still print the data: read it before deciding.
+        let j; try { j = JSON.parse(r.stdout); } catch { throw new GhError(r.status !== 0 ? "GitHub GraphQL request failed (prior work)" : "GraphQL answer is not JSON (prior work)"); }
+        const errs = Array.isArray(j?.errors) ? j.errors : [];
+        const readableOnly = errs.every((e) => e && ["FORBIDDEN", "NOT_FOUND"].includes(e.type) && Array.isArray(e.path) && e.path.includes("nodes"));
+        if ((errs.length > 0 && !readableOnly) || (errs.length === 0 && r.status !== 0)) throw new GhError("GitHub GraphQL request failed (prior work)");
         const t = j?.data?.repository?.issue?.timelineItems;
         if (!t || !Array.isArray(t.nodes) || typeof t.pageInfo?.hasNextPage !== "boolean") throw new GhError("GraphQL answer has no timeline (prior work)");
         for (const node of t.nodes) {
+          if (node === null && errs.length > 0) { unreadable++; continue; }
           const src = node?.source;
           if (node?.__typename !== "CrossReferencedEvent" || !src || typeof src !== "object") throw new GhError("timeline: a cross-reference has an unexpected shape");
           if (src.__typename !== "PullRequest") continue; // a plain issue mentioning this one is not a pull request
@@ -131,7 +138,7 @@ export function createGh(run) {
           const url = typeof src.url === "string" && /^https:\/\/github\.com\//.test(src.url) ? src.url : null;
           seen.set(key, { number: src.number, state, title: src.title.slice(0, 120), by: typeof src.author?.login === "string" ? src.author.login : null, url, repoId: src.repository.databaseId, sameRepo: src.repository.databaseId === repoId });
         }
-        if (!t.pageInfo.hasNextPage) return [...seen.values()];
+        if (!t.pageInfo.hasNextPage) return { prs: [...seen.values()], incomplete: false, unreadable };
         after = t.pageInfo.endCursor;
         if (typeof after !== "string" || after.length === 0) throw new GhError("GraphQL answer has no cursor (prior work)");
       }

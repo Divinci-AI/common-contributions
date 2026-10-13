@@ -216,8 +216,8 @@ test("prior work: someone else's OPEN pull request for this issue refuses the pu
 test("prior work: your own open PR, a merged one and a closed one do not refuse; merged and open ones are shown in the review info", () => {
   const { out } = plan({ world: (w) => (w.timeline = [xref(41, "open", "alice"), xref(42, "closed", "bob", { merged: true }), xref(43, "closed", "carol")]) });
   assert.deepEqual(failed(out), []);
-  assert.deepEqual(out.info.priorWork.map((l) => l.slice(0, 12)), ["#41 open by ", "#42 merged b"]);
-  assert.match(reviewText({ plan: out, texts: { commitSha: "c".repeat(40), message: "m", title: "t", body: "b" } }), /Other pull requests that mention this issue \(not blocking\):\n  #41 open by alice/);
+  assert.deepEqual(out.info.priorWork.map((l) => l.slice(0, 12)), ["#41 open by ", "#42 merged b", "#43 closed b"]);
+  assert.match(reviewText({ plan: out, texts: { commitSha: "c".repeat(40), message: "m", title: "t", body: "b" } }), /Pull requests that mention this issue \(open ones by others block; these did not\):\n  #41 open by alice/);
 });
 test("prior work: plain issue mentions (not pull requests) are ignored; an unreadable timeline refuses", () => {
   const { out } = plan({ world: (w) => (w.timeline = [crossRef(9, "open", { asIssue: true })]) });
@@ -239,5 +239,11 @@ test("prior work: the review says so when the lookup was not made", () => {
   const { out } = plan();
   const t = (info) => reviewText({ plan: { ...out, info }, texts: { commitSha: "c".repeat(40), message: "m", title: "t", body: "b" } });
   assert.match(t({ ...out.info, priorWork: null }), /Earlier work on this issue: not checked/);
-  assert.match(t({ ...out.info, priorWork: [] }), /No other pull request mentions this issue\./);
+  assert.match(t({ ...out.info, priorWork: [] }), /No pull request mentions this issue/);
+});
+
+test("prior work: 500+ cross-references or unreadable mentions are shown as lookup limits and never refuse", () => {
+  const { out } = plan({ world: (w) => (w.timeline = Array.from({ length: 501 }, (_, i) => crossRef(i + 1, "closed", { repoId: 9999 }))) });
+  assert.deepEqual(failed(out), []);
+  assert.ok(out.info.priorWork.some((l) => /^\(lookup limit\) more than 500/.test(l)));
 });

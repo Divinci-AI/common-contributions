@@ -136,7 +136,7 @@ export function reviewText(first, { dry = false, asking = false } = {}) {
     `Interval in force between our pull requests to this project: ${i.intervalHours ?? "?"} hours`,
     `Published under your name: ${plan.bound.user.name} <${plan.bound.user.email}>`,
     dry ? `Dry run: no certification was asked and nothing will be changed. Certifications this project requires, asked when you publish: ${required}.` : asking ? `Certifications you will be asked for next (typed by you): ${required}. Nothing has been certified yet.` : `Certifications given: CLA ${plan.bound.ack?.cla ? "yes" : "no"}, DCO sign-off ${plan.bound.ack?.dco ? "yes" : "no"}, flagged code allowed ${plan.bound.ack?.flagged ? "yes" : "no"}`,
-    i.priorWork === null || i.priorWork === undefined ? "Earlier work on this issue: not checked" : i.priorWork.length > 0 ? `Other pull requests that mention this issue (not blocking):\n  ${i.priorWork.join("\n  ")}` : "No other pull request mentions this issue.",
+    i.priorWork === null || i.priorWork === undefined ? "Earlier work on this issue: not checked" : i.priorWork.length > 0 ? `Pull requests that mention this issue (open ones by others block; these did not):\n  ${i.priorWork.join("\n  ")}` : "No pull request mentions this issue (linked-only pull requests are not seen).",
     (i.flagged?.length ?? 0) > 0 ? `Lines that touch the environment, network or processes:\n  ${i.flagged.join("\n  ")}` : "No lines touch the environment, network or processes.",
     `--- diff (${plan.diff.total} changed lines) ---\n${plan.diff.patch}`,
     `--- commit message ---\n${texts.message}`,

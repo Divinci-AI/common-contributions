@@ -11,12 +11,12 @@ const CLI = fileURLToPath(new URL("../src/cli.mjs", import.meta.url));
 const FAKEGH = pathToFileURL(fileURLToPath(new URL("./fakegh.mjs", import.meta.url))).href;
 const PR = (n, state, o = {}) => crossRef(n, state, o);
 
-function setup(timeline) {
+function setup(timeline, world = "") {
   const gh = join(tmp(), "gh");
-  writeFileSync(gh, `#!${process.execPath}\nimport { defaultWorld, fakeRunner } from ${JSON.stringify(FAKEGH)};\nconst w = defaultWorld(); w.timeline = ${JSON.stringify(timeline)};\nconst r = fakeRunner(w)(process.argv.slice(2));\nprocess.stdout.write(r.stdout); process.stderr.write(r.stderr); process.exit(r.status);\n`);
+  writeFileSync(gh, `#!${process.execPath}\nimport { defaultWorld, fakeRunner } from ${JSON.stringify(FAKEGH)};\nconst w = defaultWorld(); w.timeline = ${JSON.stringify(timeline)}; ${world}\nconst r = fakeRunner(w)(process.argv.slice(2));\nprocess.stdout.write(r.stdout); process.stderr.write(r.stderr); process.exit(r.status);\n`);
   chmodSync(gh, 0o755);
   const issues = join(tmp(), "issues.json");
-  writeFileSync(issues, JSON.stringify([{ number: 7, title: "t", labels: [{ name: "agent-ready" }], body: "## Done when (one file: `tests/a.test.ts`)\n- covers `src/a.ts`\n" }]));
+  writeFileSync(issues, JSON.stringify([{ number: 7, title: "test: add coverage", labels: [{ name: "agent-ready" }], body: "## Done when (one file: `tests/a.test.ts`)\n- covers `src/a.ts`\n" }]));
   return { gh, issues, home: tmp(), repo: tmp() };
 }
 const run = (s, extra, provider = []) => new Promise((resolve) => {
@@ -38,7 +38,7 @@ test("run-one: --ignore-prior-work goes on (and then meets the next check, not t
 test("run-one: no prior work found says so; a closed PR is only a note", async () => {
   const s = setup([PR(41, "closed")]);
   const r = await run(s, ["--github", "acme/widgets", "--gh", s.gh]);
-  assert.match(r.err, /note: closed \(not merged\)/); assert.match(r.err, /prior work: none found/);
+  assert.match(r.err, /note: closed \(not merged\)/); assert.match(r.err, /prior work: no pull request mentions/);
 });
 test("run-one: a GitHub error refuses (never reads as 'none found'); without --github it warns, and a hosted run refuses", async () => {
   const bad = setup([]); const r1 = await run(bad, ["--github", "other/missing", "--gh", bad.gh]);
@@ -55,11 +55,34 @@ test("run-one: a hostile title is escaped on screen; a mention from another repo
   assert.equal(r.status, 2); assert.doesNotMatch(r.err, /[\u001b\u0007\u202e]/); assert.match(r.err, /\\u\{1b\}/);
   const t = setup([PR(41, "open", { repoId: 9999 })]);
   const q = await run(t, ["--github", "acme/widgets", "--gh", t.gh]);
-  assert.match(q.err, /other repositories mention #7 \(not blocking\)/); assert.match(q.err, /prior work: none found/);
+  assert.match(q.err, /other repositories mention #7 \(not blocking\)/); assert.match(q.err, /prior work: no pull request mentions/);
 });
 
 test("run-one: --no-prior-work-check lets a hosted run past the missing check (it then meets the next refusal: no credentials)", async () => {
   const s = setup([]);
   const r = await run(s, ["--no-prior-work-check"], ["--provider", "workers-ai"]);
   assert.doesNotMatch(r.err, /hosted run spends money/); assert.match(r.err, /warning: prior-work check skipped/);
+});
+
+test("run-one: a failed lookup refuses, and only --ignore-prior-work goes on past it (loudly)", async () => {
+  const s = setup([], "w.failTimeline = true;");
+  const a = await run(s, ["--github", "acme/widgets", "--gh", s.gh]);
+  assert.equal(a.status, 2); assert.match(a.err, /could not look for earlier work/); assert.match(a.err, /--ignore-prior-work/);
+  const b = await run(s, ["--github", "acme/widgets", "--gh", s.gh, "--ignore-prior-work"]);
+  assert.match(b.err, /WARNING: the prior-work lookup failed/); assert.match(b.err, /names no existing source module/);
+});
+test("run-one: --github naming a project where #N is a different issue refuses (it would say 'none found' about the wrong issue)", async () => {
+  const s = setup([], "w.issue.title = 'something else entirely';");
+  const r = await run(s, ["--github", "acme/widgets", "--gh", s.gh]);
+  assert.equal(r.status, 2); assert.match(r.err, /wrong --github\?/);
+});
+test("run-one: the skipped-check warning names the flag that is missing", async () => {
+  const s = setup([]);
+  assert.match((await run(s, ["--github", "acme/widgets"])).err, /\(--gh not given\)/);
+  assert.match((await run(s, ["--gh", s.gh])).err, /\(--github not given\)/);
+});
+test("run-one: more than 500 cross-references is a note, not a stop; mentions the login cannot read are noted", async () => {
+  const s = setup(Array.from({ length: 501 }, (_, i) => PR(i + 1, "closed")));
+  const r = await run(s, ["--github", "acme/widgets", "--gh", s.gh]);
+  assert.match(r.err, /note: more than 500 cross-references exist/); assert.doesNotMatch(r.err, /refusing: read those first/);
 });

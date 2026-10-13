@@ -99,22 +99,32 @@ test("compare reports a renamed file's previous name too, so an upstream rename 
 test("priorWork: only pull requests; keyed by repository AND number so a same-numbered PR elsewhere cannot overwrite; the strongest state wins", () => {
   const { gh } = setup((w) => (w.timeline = [crossRef(1, "open"), crossRef(1, "closed", { repoId: 5 }), crossRef(1, "closed"), crossRef(2, "merged"), crossRef(3, "closed"), crossRef(4, "open", { url: "javascript:alert(1)" }), crossRef(9, "open", { asIssue: true })]));
   const got = gh.priorWork("acme", "widgets", 7, 1001);
-  assert.deepEqual(got.map((x) => [x.number, x.state, x.sameRepo]), [[1, "open", true], [1, "closed", false], [2, "merged", true], [3, "closed", true], [4, "open", true]]);
-  assert.equal(got[4].url, null);
+  assert.deepEqual(got.prs.map((x) => [x.number, x.state, x.sameRepo]), [[1, "open", true], [1, "closed", false], [2, "merged", true], [3, "closed", true], [4, "open", true]]);
+  assert.equal(got.prs[4].url, null); assert.equal(got.incomplete, false); assert.equal(got.unreadable, 0);
 });
-test("priorWork: a surprise is a refusal, never a skip (bad node, unknown state, no repository id, GraphQL errors, not JSON)", () => {
+test("priorWork: a surprise is a refusal, never a skip (bad node, unknown state, no repository id, other GraphQL errors, not JSON, failed request)", () => {
   for (const [name, mod, re] of [["no source", (n) => delete n.source, /unexpected shape/], ["unknown state", (n) => (n.source.state = "WEIRD"), /unexpected state/], ["no state", (n) => delete n.source.state, /"state"/], ["no repository", (n) => delete n.source.repository, /"repository"/], ["no repo id", (n) => (n.source.repository = {}), /repository id/], ["wrong node type", (n) => (n.__typename = "Other"), /unexpected shape/]]) {
     const n = crossRef(1, "open"); mod(n);
     const { gh } = setup((w) => (w.timeline = [n]));
     assert.throws(() => gh.priorWork("acme", "widgets", 7, 1001), re, name);
   }
-  assert.throws(() => createGh(() => ({ status: 0, stdout: JSON.stringify({ errors: [{ message: "x" }] }), stderr: "" })).priorWork("a", "b", 1, 1), /errors/);
+  assert.throws(() => createGh(() => ({ status: 0, stdout: JSON.stringify({ errors: [{ message: "x", type: "OTHER", path: [] }] }), stderr: "" })).priorWork("a", "b", 1, 1), /request failed/);
   assert.throws(() => createGh(() => ({ status: 0, stdout: "<html>", stderr: "" })).priorWork("a", "b", 1, 1), /not JSON/);
   assert.throws(() => createGh(() => ({ status: 1, stdout: "", stderr: "" })).priorWork("a", "b", 1, 1), /request failed/);
+  assert.throws(() => createGh(() => ({ status: 1, stdout: JSON.stringify({ data: { repository: { issue: { timelineItems: { pageInfo: { hasNextPage: false, endCursor: "x" }, nodes: [] } } } } }), stderr: "" })).priorWork("a", "b", 1, 1), /request failed/, "exit 1 with no errors");
 });
-test("priorWork: comment spam cannot push it past a limit (the server returns cross-references only); more than 500 pull requests is a refusal", () => {
+test("priorWork: mentions this login cannot read (FORBIDDEN, null node, gh exits 1) are counted, not fatal", () => {
+  const out = { data: { repository: { issue: { timelineItems: { pageInfo: { hasNextPage: false, endCursor: "x" }, nodes: [null, crossRef(5, "open")] } } } }, errors: [{ type: "FORBIDDEN", path: ["repository", "issue", "timelineItems", "nodes", 0, "source"], message: "SAML" }] };
+  const got = createGh(() => ({ status: 1, stdout: JSON.stringify(out), stderr: "" })).priorWork("a", "b", 1, 1001);
+  assert.equal(got.unreadable, 1); assert.deepEqual(got.prs.map((x) => x.number), [5]);
+});
+test("priorWork: comment spam cannot push it past a limit; 500+ cross-references (other repositories count) make it incomplete, not a refusal", () => {
   const { gh } = setup((w) => (w.timeline = Array.from({ length: 250 }, (_, i) => crossRef(i + 1, "closed"))));
-  assert.equal(gh.priorWork("acme", "widgets", 7, 1001).length, 250);
-  const big = setup((w) => (w.timeline = Array.from({ length: 501 }, (_, i) => crossRef(i + 1, "closed")))).gh;
-  assert.throws(() => big.priorWork("acme", "widgets", 7, 1001), /too many pull requests/);
+  const ok = gh.priorWork("acme", "widgets", 7, 1001); assert.equal(ok.prs.length, 250); assert.equal(ok.incomplete, false);
+  const big = setup((w) => (w.timeline = Array.from({ length: 501 }, (_, i) => crossRef(i + 1, "closed")))).gh.priorWork("acme", "widgets", 7, 1001);
+  assert.equal(big.incomplete, true); assert.equal(big.prs.length, 500);
+});
+test("priorWork: hasNextPage with no cursor is an error, not an endless loop", () => {
+  const out = { data: { repository: { issue: { timelineItems: { pageInfo: { hasNextPage: true, endCursor: null }, nodes: [] } } } } };
+  assert.throws(() => createGh(() => ({ status: 0, stdout: JSON.stringify(out), stderr: "" })).priorWork("a", "b", 1, 1), /no cursor/);
 });

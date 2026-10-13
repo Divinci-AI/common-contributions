@@ -10,7 +10,7 @@ import { GhError } from "./ghclient.mjs";
 import { MIN_HOURS_BETWEEN_PRS, OPTIN_PATH, globMatch, hiddenChars, isPlainText, parseOptIn } from "./optin.mjs";
 import { issueHash, publishProblems } from "./record.mjs";
 import { isConfigFile } from "./scope.mjs";
-import { describePrior, othersOpen } from "./prior.mjs";
+import { describePrior, limitsNote, othersOpen } from "./prior.mjs";
 
 export const MARKER_PREFIX = "common-ai";
 export const TOOL_MAX_OPEN = 3;
@@ -179,7 +179,7 @@ export function planPublish(o) {
   // Someone else already has an open pull request mentioning this issue: a second one buries the first for the maintainer. (Merged or closed mentions are shown, not refused.)
   const prior = guard("look for earlier work on this issue", () => gh.priorWork(repo.ownerLogin, repo.fullName.split("/")[1], issueNumber, repo.id));
   if (prior) {
-    const theirs = othersOpen(prior, { userLogin: user.login });
+    const theirs = othersOpen(prior.prs, { userLogin: user.login });
     add("no one else has an open pull request for this issue", theirs.length === 0, describePrior(theirs).lines.join("; "));
   }
   const recent = ledger.filter((l) => l.userId === user.id && now - l.at < DAY);
@@ -213,7 +213,7 @@ export function planPublish(o) {
   if (spec.certification.cla !== "none") add("CLA acknowledged", flags.claSigned === true, `this project requires a ${spec.certification.cla} CLA; you are asked to type that you have signed it when you publish (it can bind your employer)`);
   if (spec.certification.dco === "signed-off-by") add("DCO certification given", flags.certifyDco === true, "this project requires a Signed-off-by line; you are asked to type the certification when you publish, and only if YOU can certify the Developer Certificate of Origin for this change");
 
-  return result({ spec, diff, issueTitle: issue.title, info: { intervalHours: spec.min_hours_between_prs, contact: spec.contact, policyUrl: spec.policy_url, safetyReason: spec.safety_reason, safetyCritical: spec.safety_critical, flagged, priorWork: prior ? describePrior(prior).lines : null }, bound: { ack, repoId: repo.id, ownerId: repo.ownerId, fullName: repo.fullName, defaultBranch: repo.defaultBranch, base: record.base, head, specBlobSha: f.blobSha, specCommit: lc?.sha ?? null, recordSha: record.recordSha, issueNumber, user: { login: user.login, id: user.id, name: user.name, email: user.email } } });
+  return result({ spec, diff, issueTitle: issue.title, info: { intervalHours: spec.min_hours_between_prs, contact: spec.contact, policyUrl: spec.policy_url, safetyReason: spec.safety_reason, safetyCritical: spec.safety_critical, flagged, priorWork: prior ? [...describePrior(prior.prs).all, ...limitsNote(prior).map((x) => `(lookup limit) ${x}`)] : null }, bound: { ack, repoId: repo.id, ownerId: repo.ownerId, fullName: repo.fullName, defaultBranch: repo.defaultBranch, base: record.base, head, specBlobSha: f.blobSha, specCommit: lc?.sha ?? null, recordSha: record.recordSha, issueNumber, user: { login: user.login, id: user.id, name: user.name, email: user.email } } });
 }
 
 export { isPlainText };

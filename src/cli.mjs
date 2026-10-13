@@ -38,7 +38,7 @@ import { loadPin, qualifyRuntime, parseTap } from "./pin.mjs";
 import { cleanup } from "./hygiene.mjs";
 import { parseOptIn } from "./optin.mjs";
 import { createGh, ghRunner } from "./ghclient.mjs";
-import { describePrior } from "./prior.mjs";
+import { describePrior, limitsNote } from "./prior.mjs";
 import { dryRun, publish, ghWriter, readLedger, certifyAfterReview, reviewText } from "./execute.mjs";
 import { DCO_TEXT, DCO_WARNING, CLA_WARNING } from "./legal.mjs";
 import { ttyAsk, escapeForTerminal } from "./tty.mjs";
@@ -121,18 +121,30 @@ if (cmd === "status") {
   {
     const slug = flag("--github"), ghPath = flag("--gh"), hosted0 = provider === "workers-ai" && !replyFile;
     if (slug && ghPath) {
-      let prior;
-      try { const g = createGh(ghRunner(ghPath)); const rp = g.repo(slug); prior = g.priorWork(rp.ownerLogin, rp.fullName.split("/")[1], Number(numberArg), rp.id); } catch (e) { console.error(`refusing: could not look for earlier work on #${numberArg} (${e.message}); fix that or run without --github`); process.exit(2); }
-      const d = describePrior(prior.filter((x) => x.sameRepo));
-      const elsewhere = describePrior(prior.filter((x) => !x.sameRepo)).lines;
-      if (elsewhere.length > 0) console.error(`note: pull requests in other repositories mention #${numberArg} (not blocking):\n  ${elsewhere.join("\n  ")}`);
-      if (d.closedLines.length > 0) console.error(`note: closed (not merged) pull requests mention #${numberArg}:\n  ${d.closedLines.join("\n  ")}`);
-      if (d.lines.length > 0) {
-        console.error(`prior work: pull requests already mention #${numberArg}:\n  ${d.lines.join("\n  ")}`);
-        if (!flags.includes("--ignore-prior-work")) { console.error("refusing: read those first; if this is still worth doing, run again with --ignore-prior-work"); process.exit(2); }
-      } else console.error(`prior work: none found for #${numberArg}`);
+      const ignore = flags.includes("--ignore-prior-work");
+      let found, rp, g;
+      try {
+        g = createGh(ghRunner(ghPath)); rp = g.repo(slug);
+        const iss = g.issue(rp.id, Number(numberArg));
+        if (iss.title !== task.title) throw new Error(`#${numberArg} on ${slug} is titled "${iss.title.slice(0, 60)}", not the issue in your issues file: wrong --github?`);
+        found = g.priorWork(rp.ownerLogin, rp.fullName.split("/")[1], Number(numberArg), rp.id);
+      } catch (e) {
+        if (!ignore) { console.error(`refusing: could not look for earlier work on #${numberArg} (${escapeForTerminal(e.message)}); fix that, or go on without the check with --ignore-prior-work`); process.exit(2); }
+        console.error(`WARNING: the prior-work lookup failed (${escapeForTerminal(e.message)}); going on because of --ignore-prior-work`);
+      }
+      if (found) {
+        const d = describePrior(found.prs.filter((x) => x.sameRepo));
+        const elsewhere = describePrior(found.prs.filter((x) => !x.sameRepo)).lines;
+        for (const l of limitsNote(found)) console.error(`note: ${l}`);
+        if (elsewhere.length > 0) console.error(`note: pull requests in other repositories mention #${numberArg} (not blocking):\n  ${elsewhere.join("\n  ")}`);
+        if (d.closedLines.length > 0) console.error(`note: closed (not merged) pull requests mention #${numberArg}:\n  ${d.closedLines.join("\n  ")}`);
+        if (d.lines.length > 0) {
+          console.error(`prior work: pull requests already mention #${numberArg}:\n  ${d.lines.join("\n  ")}`);
+          if (!ignore) { console.error("refusing: read those first; if this is still worth doing, run again with --ignore-prior-work"); process.exit(2); }
+        } else console.error(`prior work: no pull request mentions #${numberArg} (linked-only pull requests are not seen)`);
+      }
     } else if (hosted0 && !flags.includes("--no-prior-work-check")) { console.error("refusing: a hosted run spends money, so it needs the prior-work check (--github owner/name --gh /abs/gh), or --no-prior-work-check to skip it"); process.exit(2); }
-    else console.error("warning: prior-work check skipped (no --github and --gh); someone may already have a pull request for this issue");
+    else console.error(`warning: prior-work check skipped (${[slug ? null : "--github", ghPath ? null : "--gh"].filter(Boolean).join(" and ")} not given); someone may already have a pull request for this issue`);
   }
 
   // Context the model gets: the source file(s) the issue names, and one small existing test as a style example.

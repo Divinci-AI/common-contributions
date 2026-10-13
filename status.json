@@ -98,7 +98,7 @@
     {
       "piece": "Pull request publishing",
       "status": "partly-built",
-      "detail": "A dry run and a publisher that opens a pull request only from the submitter's own fork, after they confirm on their terminal, are built and tested against a fake GitHub only. They have never run against GitHub, and no pull request has been opened.",
+      "detail": "A dry run and a publisher that opens a pull request only from the submitter's own fork, in one command, are built and tested against a fake GitHub only. They have never run against GitHub, and no pull request has been opened.",
       "modules": [
         "src/publish.mjs",
         "src/execute.mjs",

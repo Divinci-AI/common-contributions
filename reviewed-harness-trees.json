@@ -3,7 +3,8 @@
   "trees": [
     "bcb7175ea94bae482784438fc9276fe197d9ff655eeb93a164c4ccd93c17cfba",
     "f1a74fe60f858312fbe13a506261d5d70e13569160bafc5212167c9d0397b5e9",
-    "cdc499b9b8b3b485e36645b4a734517d23528c314a600a95851330d2b99e9d24"
+    "cdc499b9b8b3b485e36645b4a734517d23528c314a600a95851330d2b99e9d24",
+    "945c7777dbfb2829380719b1608ad1eb703b153eadf42d93d963693031c8a04c"
   ],
   "released": [
     {
@@ -25,6 +26,13 @@
       "date": "2026-10-12",
       "reviewed_by": "Opus 5.5 and Hermes (design and build reviews of the per-project publish interval, then fixes: unreadable and out-of-calendar ledger times refused cleanly, including the top edge)",
       "known_limits": "as the previous release, plus: a negative ledger time does not block (an ancient entry legitimately does not); a corrupt ledger line for a project now blocks that project until fixed by hand; bad ledger times on OTHER projects still bypass the three-a-day cap and the waiting-on-you check; concurrent publishes by one user read the ledger once; the dry-run interval line has no test"
+    },
+    {
+      "srcTreeHash": "945c7777dbfb2829380719b1608ad1eb703b153eadf42d93d963693031c8a04c",
+      "commit": "f6e520d969b86decfc0431b8c8d3e5db37bb7712",
+      "date": "2026-10-12",
+      "reviewed_by": "Opus 5.5 and Hermes (direction and code reviews of the one-step publish, then fixes). The ledger re-read at every plan and the one-publish-at-a-time lock were added for Hermes's race finding after its review: covered by tests and mutations, not re-read by a reviewer",
+      "known_limits": "as the previous release, minus 'publish confirmation is one y/N' (there is no confirmation now: a person runs one command; a CLA/DCO certification is typed on /dev/tty only when the project requires it), plus: publish no longer waits or asks for approval, so 'a human submits' rests on the act of running the command from their own account; the dry run leaves unreferenced objects in the clone's object store; a failed re-check after the fork leaves the fork on the user's account; the lock and ledger are local files the user controls (a hosted service would need server-side caps); the coverage check only warns"
     }
   ]
 }

@@ -131,11 +131,6 @@ test("the review text shows the contact, the author, the certifications and the 
   const r = await publish(s.common);
   assert.equal(readLedger(s.common.ledgerFile)[0]?.ownerId, 7, "the owner at publish time is remembered");
 });
-test("no prompt, no terminal, no waiting: publish never asks anything of its own (certifications are the CLI's job, and only when required)", async () => {
-  const s = scene(); const r = await publish({ ...s.common, ask: () => { throw new Error("must not ask"); }, now: Date.now() });
-  assert.equal(r.phase, "published", r.error);
-});
-
 test("certifications are asked AFTER the review text is shown, and a plan that fails for other reasons never asks", () => {
   const s = scene({ spec: { ...SPEC, certification: { dco: "signed-off-by", cla: "individual" } } });
   const order = [];
@@ -158,4 +153,37 @@ test("certification answers given as a callback reach the commit: Signed-off-by 
   assert.match(d.texts.message, /^Signed-off-by: Alice Example <alice@example\.org>$/m);
   const n = dryRun({ ...s.common, flags: { certifyDco: true } });
   assert.equal(n.texts.commitSha, d.texts.commitSha, "callback and plain object give the same commit");
+});
+
+test("the screen before the certification says nothing was certified yet and names what will be asked; a dry run names what the project requires", () => {
+  const s = scene({ spec: { ...SPEC, certification: { dco: "signed-off-by", cla: "individual" } } });
+  const { flags } = certifyAfterReview({ ...s.common, flags: undefined }, { display: (t) => { assert.match(t, /Certifications you will be asked for next \(typed by you\): individual CLA and DCO sign-off/); assert.match(t, /Nothing has been certified yet/); assert.doesNotMatch(t, /Certifications given/); }, askCertifications: ({ text }) => { assert.match(text, /Nothing has been certified yet/); return { claSigned: true, certifyDco: true }; } });
+  assert.deepEqual(flags, { claSigned: true, certifyDco: true });
+  const d = dryRun({ ...s.common, flags: { claSigned: true, certifyDco: true } });
+  assert.match(reviewText(d, { dry: true }), /Certifications this project requires, asked when you publish: individual CLA and DCO sign-off/);
+});
+
+test("flagged code and no --allow-flagged-code: nobody is asked to certify and nothing is written", async () => {
+  const s = scene();
+  s.common.record = buildRecord({ harness: { commit: "h".repeat(40), dirty: false, srcTreeHash: TREE }, project: { dir: "r" }, origin: "github.com/acme/widgets", issue: { number: 7, sha256: issueHash(s.w.issue.title, s.w.issue.body) }, model: "m", base: s.common.record.base, source: "git-archive", container: true, pin: { escapeSuite: { pass: 15, fail: 0, skipped: 0 } }, image: "sha256:x", dep: { matched: true }, limits: {}, files: { "tests/new.test.ts": "export const k = process.env.SECRET;\n" }, checks: [{ name: "t", status: 0 }], key: KEY });
+  let asked = false;
+  const r = certifyAfterReview({ ...s.common, flags: undefined }, { display: () => {}, askCertifications: () => { asked = true; return {}; }, allowFlaggedCode: false });
+  assert.ok(r.refused, "the provisional plan uses the real flag, so a publish that would be refused never reaches the question"); assert.equal(asked, false);
+  assert.ok(r.refused.plan.checks.some((c) => !c.ok && /environment, uses the network/.test(c.name)));
+  const p = await publish({ ...s.common, flags: { allowFlaggedCode: false } });
+  assert.equal(p.phase, "refused"); assert.equal(s.w.writes.length, 0);
+  const ok = await publish({ ...s.common, flags: { allowFlaggedCode: true } });
+  assert.equal(ok.phase, "published", ok.error);
+});
+
+test("what the person was shown must be what is published: the diff or the project's file changing after the screen refuses with zero writes", async () => {
+  const s = scene();
+  const { expect } = certifyAfterReview({ ...s.common, flags: undefined }, { display: () => {}, askCertifications: () => ({}) });
+  assert.ok(expect.specBlobSha && expect.patch);
+  const fileChanged = await publish({ ...s.common, expect: { ...expect, specBlobSha: "0".repeat(40) } });
+  assert.equal(fileChanged.phase, "refused"); assert.ok(fileChanged.plan.checks.some((c) => c.name === "what you were shown" && !c.ok));
+  const diffChanged = await publish({ ...s.common, expect: { ...expect, patch: expect.patch + "x" } });
+  assert.equal(diffChanged.phase, "refused"); assert.equal(s.w.writes.length, 0);
+  const fine = await publish({ ...s.common, expect });
+  assert.equal(fine.phase, "published", fine.error);
 });

@@ -6,7 +6,7 @@
  */
 import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { planPublish } from "./publish.mjs";
 import { approvalToken, branchName, buildCommit, buildCommitMessage, buildPrBody, cleanTitle } from "./publisher.mjs";
 
@@ -67,6 +67,8 @@ export async function publish(o) {
   const first = prepare(o);
   if (first.phase !== "ready") return first;
   const { texts, plan } = first;
+  // What the person was shown before certifying must be what is being published (the project's file and the diff can change while they read).
+  if (o.expect && (o.expect.specBlobSha !== plan.bound.specBlobSha || o.expect.patch !== plan.diff.patch)) return { phase: "refused", plan: { ...plan, ok: false, checks: [...plan.checks, { name: "what you were shown", ok: false, detail: "the project's opt-in file or the diff changed after you were shown them; nothing was changed, run the command again" }] }, texts };
 
   const recheck = (stage) => { const p = prepare(o); if (p.phase !== "ready" || p.texts.token !== texts.token) { throw new RecheckError(`${stage}: the plan changed while publishing (${p.phase === "ready" ? "token differs" : p.plan.checks.filter((c) => !c.ok).map((c) => c.name).join(", ")}); nothing was opened`); } };
   try {
@@ -107,14 +109,17 @@ export async function publish(o) {
 class RecheckError extends Error {}
 
 /** What is about to happen, for the person who runs the command. `dry` says no certification was asked and nothing will be changed. */
-export function reviewText(first, { dry = false } = {}) {
+export function reviewText(first, { dry = false, asking = false } = {}) {
   const { plan, texts } = first, i = plan.info ?? {};
+  const cert = plan.spec?.certification ?? {};
+  const reqs = [cert.cla && cert.cla !== "none" ? `${cert.cla} CLA` : null, cert.dco === "signed-off-by" ? "DCO sign-off (Signed-off-by)" : null].filter(Boolean);
+  const required = reqs.length > 0 ? reqs.join(" and ") : "none";
   return [
     `Repository: ${plan.bound.fullName}   issue #${plan.bound.issueNumber}   base ${plan.bound.base.slice(0, 12)}   commit ${texts.commitSha.slice(0, 12)}`,
     `Project contact: ${i.contact ?? "?"}   policy: ${i.policyUrl ?? "?"}${i.safetyCritical ? `\nSAFETY-CRITICAL project${i.safetyReason ? `: ${i.safetyReason}` : ""}: tests and documentation only` : ""}`,
     `Interval in force between our pull requests to this project: ${i.intervalHours ?? "?"} hours`,
     `Published under your name: ${plan.bound.user.name} <${plan.bound.user.email}>`,
-    dry ? "Dry run: no certification was asked and nothing will be changed. A publish asks any CLA or DCO certification the project requires." : `Certifications given: CLA ${plan.bound.ack?.cla ? "yes" : "no"}, DCO sign-off ${plan.bound.ack?.dco ? "yes" : "no"}, flagged code allowed ${plan.bound.ack?.flagged ? "yes" : "no"}`,
+    dry ? `Dry run: no certification was asked and nothing will be changed. Certifications this project requires, asked when you publish: ${required}.` : asking ? `Certifications you will be asked for next (typed by you): ${required}. Nothing has been certified yet.` : `Certifications given: CLA ${plan.bound.ack?.cla ? "yes" : "no"}, DCO sign-off ${plan.bound.ack?.dco ? "yes" : "no"}, flagged code allowed ${plan.bound.ack?.flagged ? "yes" : "no"}`,
     (i.flagged?.length ?? 0) > 0 ? `Lines that touch the environment, network or processes:\n  ${i.flagged.join("\n  ")}` : "No lines touch the environment, network or processes.",
     `--- diff (${plan.diff.total} changed lines) ---\n${plan.diff.patch}`,
     `--- commit message ---\n${texts.message}`,
@@ -126,11 +131,13 @@ export function reviewText(first, { dry = false } = {}) {
  * Show the person what will be published FIRST, then ask the certifications (none are asked when the project requires none). The plan is first made with provisional "yes" answers purely so there is something
  * to show; the real plan is made after, with the person's actual answers bound into the token. Returns the flags object, or {refused} when the provisional plan failed.
  * @param o   prepare() inputs without `flags`
- * @param io  {display(text), askCertifications({spec, flagged}) => flags}
+ * @param io  {display(text), askCertifications({spec, flagged, text}) => flags, allowFlaggedCode} (the real flag decides whether flagged code can pass, so nobody certifies for a publish that will be refused)
  */
 export function certifyAfterReview(o, io) {
-  const provisional = prepare({ ...o, flags: { claSigned: true, certifyDco: true, allowFlaggedCode: true } });
+  const provisional = prepare({ ...o, flags: { claSigned: true, certifyDco: true, allowFlaggedCode: io.allowFlaggedCode === true } });
   if (provisional.phase !== "ready") return { refused: provisional };
-  io.display(reviewText(provisional));
-  return { flags: io.askCertifications({ spec: provisional.plan.spec, flagged: provisional.plan.info.flagged }) };
+  const text = reviewText(provisional, { asking: true });
+  io.display(text);
+  const flags = io.askCertifications({ spec: provisional.plan.spec, flagged: provisional.plan.info.flagged, text });
+  return { flags, expect: { specBlobSha: provisional.plan.bound.specBlobSha, patch: provisional.plan.diff.patch } };
 }

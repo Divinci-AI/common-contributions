@@ -203,8 +203,8 @@ export function planPublish(o) {
 
   // 8. certification the human must make
   ack.cla = flags.claSigned === true; ack.dco = flags.certifyDco === true; ack.flagged = flags.allowFlaggedCode === true;
-  if (spec.certification.cla !== "none") add("CLA acknowledged", flags.claSigned === true, `this project requires a ${spec.certification.cla} CLA; pass --cla-signed once YOU have signed it (it can bind your employer)`);
-  if (spec.certification.dco === "signed-off-by") add("DCO certification given", flags.certifyDco === true, "this project requires a Signed-off-by line; pass --certify-dco only if YOU can certify the Developer Certificate of Origin for this change");
+  if (spec.certification.cla !== "none") add("CLA acknowledged", flags.claSigned === true, `this project requires a ${spec.certification.cla} CLA; you are asked to type that you have signed it when you publish (it can bind your employer)`);
+  if (spec.certification.dco === "signed-off-by") add("DCO certification given", flags.certifyDco === true, "this project requires a Signed-off-by line; you are asked to type the certification when you publish, and only if YOU can certify the Developer Certificate of Origin for this change");
 
   return result({ spec, diff, issueTitle: issue.title, info: { intervalHours: spec.min_hours_between_prs, contact: spec.contact, policyUrl: spec.policy_url, safetyReason: spec.safety_reason, safetyCritical: spec.safety_critical, flagged }, bound: { ack, repoId: repo.id, ownerId: repo.ownerId, fullName: repo.fullName, defaultBranch: repo.defaultBranch, base: record.base, head, specBlobSha: f.blobSha, specCommit: lc?.sha ?? null, recordSha: record.recordSha, issueNumber, user: { login: user.login, id: user.id, name: user.name, email: user.email } } });
 }

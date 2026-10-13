@@ -52,10 +52,10 @@ Check yours without contacting anyone: `node src/cli.mjs optin-check .github/age
 Unknown keys, missing keys, wrong types, duplicate keys, a byte-order mark, anything over 16 KiB or nested more than three levels, and hidden or control characters all refuse the whole file.
 
 ## What the tool will never do whatever the file says
-It never touches `.github/**`, `.gitattributes`, `.gitmodules` or `CODEOWNERS` (the publisher refuses them), the common dependency, build and CI configuration files (the list is in `src/scope.mjs`; the contribution step refuses them), or executable files and symlinks (the base commit's mode is checked). It never mentions anyone with `@`, and refuses closing keywords and references to other issues in the text it publishes (they would close or notify other threads). It opens a pull request only from the submitter's own fork and account, one at a time,.
+It never touches `.github/**`, `.gitattributes`, `.gitmodules` or `CODEOWNERS` (the publisher refuses them), the common dependency, build and CI configuration files (the list is in `src/scope.mjs`; the contribution step refuses them), or executable files and symlinks (the base commit's mode is checked). It never mentions anyone with `@`, and refuses closing keywords and references to other issues in the text it publishes (they would close or notify other threads). It opens a pull request only from the submitter's own fork and account, one at a time.
 
 ## How to say no, or stop
-Delete the file, or set `"opt_in": false`, or `"paused": true`. The next publish attempt reads it and refuses. A pull request already open is yours to close; the tool never comments on one, and it closes a pull request only in one case: one it has just created that turns out to differ from the commit and text you approved.
+Delete the file, or set `"opt_in": false`, or `"paused": true`. The next publish attempt reads it and refuses. A pull request already open is yours to close; the tool never comments on one, and it closes a pull request only in one case: one it has just created that turns out to differ from the commit and text it planned.
 
 ## What the tool cannot know
 It cannot tell whether a person who got through its checks understood the change, and it cannot see a pull request opened by a copy of the tool with the checks removed. Your contact line and your reviewers are the real safeguard.

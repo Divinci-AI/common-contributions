@@ -1,5 +1,5 @@
 /**
- * Confirmations come from the controlling terminal, never argv or stdin, so they are not typed by passing a flag or piping input. This deters a hurried
+ * A CLA/DCO certification, when a project requires one, comes from the controlling terminal, never argv or stdin, so they are not typed by passing a flag or piping input. This deters a hurried
  * human and an agent that only has a pipe; it does NOT stop a local program that opens its own pseudo-terminal (script, expect, pty), and an agent with
  * your gh login could call the GitHub API directly. Say so wherever the control is described.
  */
@@ -9,7 +9,7 @@ export const decodeLine = (bytes) => Buffer.from(bytes).toString("utf8").replace
 
 export function ttyAsk(prompt) {
   let fd;
-  try { fd = openSync("/dev/tty", "r+"); } catch { throw new Error("no terminal available: publishing needs a person at a terminal (confirmations are read from /dev/tty)"); }
+  try { fd = openSync("/dev/tty", "r+"); } catch { throw new Error("no terminal available: this project requires a certification (CLA or DCO), which only a person at a terminal can give (it is read from /dev/tty)"); }
   try {
     writeSync(fd, prompt);
     const buf = Buffer.alloc(1); const bytes = [];

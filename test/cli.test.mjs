@@ -370,9 +370,9 @@ test("legal certifications are never command-line flags (a person types them); f
   for (const f of ["--cla-signed", "--certify-dco", "--sign-cla"]) assert.ok(!src.includes(f), `${f} must not be an argv flag`);
   assert.match(src, /rest\.includes\("--allow-flagged-code"\)/);
   assert.ok(!/--approve|COOLDOWN/.test(src), "no approval token or waiting period");
-  assert.match(src, /out\.allowFlaggedCode = allowFlagged;/, "flagged code is allowed only by the explicit flag");
+  assert.match(src, /o\.expect = reviewed\.expect/, "what was shown is bound to what is published"); assert.match(src, /out\.allowFlaggedCode = allowFlagged;/, "flagged code is allowed only by the explicit flag");
   assert.ok(!/openSync as fsOpen|openSync\("\/dev\/tty/.test(src), "the CLI itself never opens the terminal to display (a dry run must work with no terminal)");
-  assert.match(src, /ttyAsk\(`[^`]*I certify/);
+  assert.match(src, /ask\(`[^`]*I certify/); assert.match(src, /ttyAsk\(pre \+ prompt\)/);
 });
 
 // ── the gate must run for every language it understands, and must not pass when it could not look ──

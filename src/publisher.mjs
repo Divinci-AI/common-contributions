@@ -97,7 +97,7 @@ export function buildCommit({ repoDir, base, files, message, author, when }) {
 
 const canonical = (v) => JSON.stringify(v, (_k, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1))) : x));
 
-/** Binds everything the human approved. Any change to any of it gives a different token. */
+/** Binds everything that was planned. Any change to any of it gives a different token. */
 export function approvalToken({ bound, commitSha, title, body, branch }) {
   return createHash("sha256").update(canonical({ ...bound, commitSha, title, body, branch })).digest("hex").slice(0, 32);
 }

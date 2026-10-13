@@ -23,7 +23,7 @@ Items 1 to 4 are engineering. Item 5 is a person saying yes, and we cannot build
 | a | Hosted model, capped API key | Not built | Built + reconciled against real billing | 2 |
 | b | Local model adapter | Mock-tested | Run once against a real local model | 2 |
 | c | Operating-system sandbox | Not built | Container verifier with escape tests | 3 |
-| d | Pull request publishing | Not built (gate only) | Fork-and-PR behind human approval | 4 |
+| d | Pull request publishing | Not built (gate only) | Fork-and-PR from the submitter's own account | 4 |
 | e | Maintainer opt-in file | Designed | Parser, validator, revocation check | 4 |
 | f | One-command install | Not built | Clean-machine install test | 5 |
 | g | Name and domain | Not cleared | Cleared or replaced | 0 |

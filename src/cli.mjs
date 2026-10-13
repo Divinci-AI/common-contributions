@@ -325,10 +325,12 @@ if (cmd === "status") {
     // A CLA/DCO certification is typed ON THE TERMINAL by the person, once per run, AFTER the text is shown, and only when the project requires one. It is never a flag.
     const memo = {};
     const allowFlagged = rest.includes("--allow-flagged-code"), dry = rest.includes("--dry-run");
-    const askCertifications = ({ spec }) => {
+    const askCertifications = ({ spec, text }) => {
       const out = {};
-      if (spec.certification.cla !== "none") { out.claSigned = ttyAsk(`\nThis project requires a ${spec.certification.cla} CLA.\n${CLA_WARNING}\nType "I have signed" to confirm: `) === "I have signed"; }
-      if (spec.certification.dco === "signed-off-by") { out.certifyDco = ttyAsk(`\n${DCO_TEXT}\n\n${DCO_WARNING}\nType "I certify" to add Signed-off-by: ${user.name} <${user.email}>: `) === "I certify"; }
+      let first = true; // the text is repeated on the terminal itself, so what is certified is seen where it is typed even if stdout is piped
+      const ask = (prompt) => { const pre = first ? `\n${escapeForTerminal(text)}\n` : ""; first = false; return ttyAsk(pre + prompt); };
+      if (spec.certification.cla !== "none") { out.claSigned = ask(`\nThis project requires a ${spec.certification.cla} CLA.\n${CLA_WARNING}\nType "I have signed" to confirm: `) === "I have signed"; }
+      if (spec.certification.dco === "signed-off-by") { out.certifyDco = ask(`\n${DCO_TEXT}\n\n${DCO_WARNING}\nType "I certify" to add Signed-off-by: ${user.name} <${user.email}>: `) === "I certify"; }
       out.allowFlaggedCode = allowFlagged;
       return out;
     };
@@ -351,9 +353,9 @@ if (cmd === "status") {
       print(reviewText(r, { dry: true }));
       console.log("DRY RUN: nothing was changed. Run the same command without --dry-run to publish.");
     } else {
-      const reviewed = certifyAfterReview({ ...o, flags: undefined }, { display: print, askCertifications });
+      const reviewed = certifyAfterReview({ ...o, flags: undefined }, { display: print, askCertifications, allowFlaggedCode: allowFlagged });
       if (reviewed.refused) { show(reviewed.refused); console.error("\nrefused: nothing was changed."); process.exit(2); }
-      memo.flags = reviewed.flags;
+      memo.flags = reviewed.flags; o.expect = reviewed.expect;
       const r = await publish(o);
       if (r.phase === "published") { console.log(r.log.join("\n")); console.log("published."); }
       else { show(r); console.error(r.error ? `\naborted: ${r.error}\n${(r.log ?? []).join("\n")}` : "\nrefused: nothing was changed."); process.exit(2); }

@@ -16,6 +16,13 @@ export function defaultWorld() {
     searchTotal: 0,
     timeline: [], // GraphQL cross-reference nodes: { __typename: "CrossReferencedEvent", source: { __typename, number, state, merged, title, url, repository: { databaseId }, author: { login } } }
     closedIssuesByCreator: {},
+    // prior-art (ghsearch.mjs): repository search, releases, recent commits, the file tree, closed issues/PRs for response times
+    repoSearch: { total_count: 0, incomplete_results: false, items: [] },
+    release: null, // { published_at } or null (404)
+    recentCommits: [], // GET /repositories/:id/commits?since=...
+    tree: null, // { tree: [{ path, type }], truncated } or null (404)
+    treeStatus: 404, // what an absent tree answers: 404, or 409 for an empty repository
+    searchNodes: [], // GraphQL search nodes (issues and pull requests)
     fail: {}, // path substring -> http status
     writes: [], forkName: "alice/widgets", forkCreated: false, pushedSha: null, prCreated: null, prClosed: false,
   };
@@ -55,6 +62,7 @@ export function fakeRunner(world) {
       const f = fields(args), start = f.after ? Number(f.after) : 0, nodes = world.timeline.slice(start, start + 100);
       return ok({ data: { repository: { issue: { timelineItems: { pageInfo: { hasNextPage: start + 100 < world.timeline.length, endCursor: String(start + 100) }, nodes } } } } });
     }
+    if (args[1] === "graphql" && args.some((a) => a.includes("search(query"))) return ok({ data: { search: { nodes: world.searchNodes } } });
     if (args[1] === "graphql") return ok({ data: { repository: { issue: { lastEditedAt: world.lastEditedAt } } } });
     const r = world.repo;
     if (path === `/repos/${r.full_name}`) return ok(r);
@@ -65,6 +73,10 @@ export function fakeRunner(world) {
       const f = world.optin; const content = Buffer.from(f.content).toString("base64");
       return ok({ type: f.type ?? "file", size: f.size ?? Buffer.byteLength(f.content), sha: f.sha ?? "d".repeat(40), encoding: f.encoding ?? "base64", content });
     }
+    if (path.startsWith(`/repositories/${r.id}/commits?`) && path.includes("since=")) return ok(page(world.recentCommits, path));
+    if (path.startsWith(`/repositories/${r.id}/releases/latest`)) return world.release ? ok(world.release) : err(404);
+    if (path.startsWith(`/repositories/${r.id}/git/trees/`)) return world.tree ? ok(world.tree) : err(world.treeStatus);
+    if (path.startsWith("/search/repositories")) return ok(world.repoSearch);
     if (path.startsWith(`/repositories/${r.id}/commits?`)) return ok([{ sha: world.optinCommit.sha, commit: { committer: { date: world.optinCommit.date } }, author: { login: world.optinCommit.authorLogin, type: world.optinCommit.authorType } }]);
     if (path.startsWith("/users/")) { const u = world.users[decodeURIComponent(path.slice(7))]; return u ? ok(u) : err(404); }
     if (path.startsWith(`/repositories/${r.id}/issues/${world.issue.number}/events`)) return ok(page(world.events, path));

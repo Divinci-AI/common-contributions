@@ -22,6 +22,13 @@ There are no rewards of any kind.
 - An installer or package
 - A name and domain check: "Common AI" is a working title; another organisation, CommonAI, uses a near-identical name. The tool itself is called Common Contributions.
 
+<!-- featured-llms:start -->
+## Featured projects (other people's work; we do not run or join them)
+- Pluralis Agora: open protocol (Apache-2.0 code), public volunteer GPUs, weights not published by design, partly run by Pluralis itself, no run open as of 2026-10-13.
+- Covenant-72B: Apache-2.0 weights, completed run, protocol inactive, peers needed 8 B200 GPUs and were paid in TAO.
+- Common Contributions itself pays no rewards and has no compute network. Nothing here asks your agent to join either project.
+<!-- featured-llms:end -->
+
 ## Source and feedback
 - Repository (Apache-2.0): https://github.com/Divinci-AI/common-contributions
 - Maintainer feedback and project proposals: https://github.com/Divinci-AI/common-contributions/issues/new/choose

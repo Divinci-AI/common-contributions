@@ -1,0 +1,134 @@
+{
+  "asOf": "2026-10-13",
+  "tagline": "You play a role in contributing compute to pushing AI forward.",
+  "disclaimer": {
+    "text": "These are other people's projects. Common Contributions does not run, join, or send anything to them, and nobody here is asking you to."
+  },
+  "cards": [
+    {
+      "id": "pluralis",
+      "title": "Pluralis Agora",
+      "kind": "Open protocol, closed weights by design",
+      "link": {
+        "label": "Paper (arXiv 2607.13332)",
+        "href": "https://arxiv.org/abs/2607.13332"
+      },
+      "claims": [
+        {
+          "id": "p-how",
+          "text": "Volunteers with a single 24 GB GPU can host one stage of a model's pipeline. Work is cut into single-sample microbatches, and faster machines receive more of them."
+        },
+        {
+          "id": "p-result",
+          "text": "Its last completed run trained an 8.6B-parameter model on 500B tokens over 40 days (May to June 2026), with about 60 contributor machines at a time and 176 unique operators thanked in the paper."
+        },
+        {
+          "id": "p-open",
+          "text": "The code is Apache-2.0."
+        },
+        {
+          "id": "p-closed",
+          "text": "The weights are not published, and Pluralis says its design keeps a model's weights inside the network."
+        },
+        {
+          "id": "p-central",
+          "text": "Pluralis runs some of the machines itself, including the first and last stages and the averaging steps. The paper says the run \"was not decentralized\"."
+        },
+        {
+          "id": "p-status",
+          "text": "No run is open right now. When we checked, its next run, Pluralis-13B-Test, showed 0 of 1,215 nodes active."
+        },
+        {
+          "id": "p-money",
+          "text": "Pluralis is a venture-funded company. Its investors describe models that are owned by the protocol with usage revenue shared with contributors."
+        }
+      ],
+      "tags": [
+        {
+          "label": "Code open",
+          "cls": "built"
+        },
+        {
+          "label": "Weights closed",
+          "cls": "none"
+        },
+        {
+          "label": "No run open",
+          "cls": "none"
+        }
+      ]
+    },
+    {
+      "id": "covenant",
+      "title": "Covenant-72B",
+      "kind": "Open weights, completed run",
+      "link": {
+        "label": "Model on Hugging Face",
+        "href": "https://huggingface.co/1Covenant/Covenant-72B"
+      },
+      "claims": [
+        {
+          "id": "c-how",
+          "text": "Each round, every peer trains 30 steps on its own slice of data and sends back a compressed update. A validator scores each update by how much it lowers the model's loss."
+        },
+        {
+          "id": "c-result",
+          "text": "It trained a 72B-parameter model on about 1.1T tokens with more than 70 different peers."
+        },
+        {
+          "id": "c-open",
+          "text": "The model weights are Apache-2.0 on Hugging Face, and the protocol code is MIT."
+        },
+        {
+          "id": "c-hw",
+          "text": "This was not spare home compute: each peer was expected to have at least eight NVIDIA B200 GPUs."
+        },
+        {
+          "id": "c-status",
+          "text": "The run is finished and the protocol is not active, so there is nothing to join."
+        },
+        {
+          "id": "c-token",
+          "text": "Peers were paid in TAO, the token of the Bittensor network, while it ran there."
+        },
+        {
+          "id": "c-dispute",
+          "text": "In April 2026 Covenant announced it was leaving Bittensor, and the departure was publicly disputed."
+        }
+      ],
+      "tags": [
+        {
+          "label": "Weights open",
+          "cls": "built"
+        },
+        {
+          "label": "Protocol inactive",
+          "cls": "none"
+        },
+        {
+          "label": "Run finished",
+          "cls": "part"
+        }
+      ]
+    }
+  ],
+  "llms": [
+    {
+      "id": "l-1",
+      "text": "## Featured projects (other people's work; we do not run or join them)"
+    },
+    {
+      "id": "l-2",
+      "text": "- Pluralis Agora: open protocol (Apache-2.0 code), public volunteer GPUs, weights not published by design, partly run by Pluralis itself, no run open as of 2026-10-13."
+    },
+    {
+      "id": "l-3",
+      "text": "- Covenant-72B: Apache-2.0 weights, completed run, protocol inactive, peers needed 8 B200 GPUs and were paid in TAO."
+    },
+    {
+      "id": "l-4",
+      "text": "- Common Contributions itself pays no rewards and has no compute network. Nothing here asks your agent to join either project."
+    }
+  ],
+  "provenance": "Every claim is pinned to a quote in the Common AI research dossier (server repo notebooks/2026-10-08-common-ai-goal/appendix/goal4/featured-model-dossier.md); that check runs there."
+}

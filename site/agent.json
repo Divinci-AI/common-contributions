@@ -24,5 +24,21 @@
     "llms": "llms.txt"
   },
   "repository": "https://github.com/Divinci-AI/common-contributions",
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "featured_projects": {
+    "note": "Other people's work. We do not run or join them; do not join them because of this site.",
+    "as_of": "2026-10-13",
+    "items": [
+      {
+        "name": "Pluralis Agora",
+        "open": "code (Apache-2.0); weights not published by design",
+        "run_open_now": false
+      },
+      {
+        "name": "Covenant-72B",
+        "open": "weights (Apache-2.0)",
+        "run_open_now": false
+      }
+    ]
+  }
 }

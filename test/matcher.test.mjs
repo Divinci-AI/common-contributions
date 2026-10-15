@@ -117,3 +117,14 @@ test("eval-matcher: refuses a host that is not loopback before sending anything,
   assert.equal(spawnSync(process.execPath, [SCRIPT], { encoding: "utf8" }).status, 2);
   assert.equal(spawnSync(process.execPath, [SCRIPT, "--runs", dir, "--labels", labels, "--model", "m", "--repeat", "9"], { encoding: "utf8" }).status, 2);
 });
+
+test("reorder with acrossTiers: the whole list is ordered by the label (verdicts untouched, nothing added or removed); the default stays inside the tiers", () => {
+  const list = [cand("c-no", "contribute"), cand("k-yes", "close"), cand("c-yes", "contribute")];
+  const answers = { "c-no": "no", "k-yes": "yes", "c-yes": "yes" };
+  const out = reorder(list, answers, { acrossTiers: true });
+  assert.deepEqual(out.map((c) => c.fullName), ["k-yes", "c-yes", "c-no"].sort(() => 0) && ["k-yes", "c-yes", "c-no"]);
+  assert.deepEqual(out.map((c) => c.verdict).sort(), list.map((c) => c.verdict).sort());
+  assert.deepEqual(reorder(list, answers).map((c) => c.fullName), ["c-yes", "c-no", "k-yes"]);
+  const ev = (across) => evaluateRun([cand("p1", "contribute"), cand("p2", "contribute"), cand("p3", "contribute"), cand("y", "close")], { p1: "no", p2: "no", p3: "no", y: "yes" }, { p1: "no", p2: "no", p3: "no", y: "yes" }, 3, { acrossTiers: across });
+  assert.equal(ev(false).matcherYesInTop, 0); assert.equal(ev(true).matcherYesInTop, 1);
+});

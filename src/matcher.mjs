@@ -44,8 +44,11 @@ export function parseChoice(text) {
 /**
  * Reorder inside each verdict tier by the model's label (yes, partly, no); candidates with no answer and ties keep their keyword order.
  * The input is already in keyword order. Returns a NEW array of the SAME objects: same set, same verdicts, no tier crossed.
+ * With `acrossTiers` (a policy the design note does NOT allow yet; measured so Michael can decide) the whole list is ordered by the label, ties by keyword order;
+ * the verdicts are still the keyword verdicts and nothing is added or removed.
  */
-export function reorder(candidates, answers) {
+export function reorder(candidates, answers, { acrossTiers = false } = {}) {
+  if (acrossTiers) return candidates.map((c, i) => ({ c, i })).sort((a, b) => (SCORE[answers[b.c.fullName]] ?? 1) - (SCORE[answers[a.c.fullName]] ?? 1) || a.i - b.i).map((x) => x.c);
   const tiers = [];
   for (const c of candidates) { let t = tiers.find((x) => x.verdict === c.verdict); if (!t) tiers.push((t = { verdict: c.verdict, items: [] })); t.items.push(c); }
   return tiers.flatMap((t) => t.items.map((c, i) => ({ c, i })).sort((a, b) => (SCORE[answers[b.c.fullName]] ?? 1) - (SCORE[answers[a.c.fullName]] ?? 1) || a.i - b.i).map((x) => x.c));
@@ -58,9 +61,9 @@ export const shown = (candidates) => candidates.filter((c) => c.read && (c.verdi
  * One run's numbers. `labels` maps fullName -> "yes" | "partly" | "no"; `answers` maps fullName -> the model's label (a missing key = unavailable).
  * demoted = labelled "yes", in the keyword top K, and NOT in the top K after reordering: the dangerous error.
  */
-export function evaluateRun(candidates, labels, answers, k = 3) {
+export function evaluateRun(candidates, labels, answers, k = 3, { acrossTiers = false } = {}) {
   const base = shown(candidates).filter((c) => labels[c.fullName]);
-  const after = reorder(base, answers);
+  const after = reorder(base, answers, { acrossTiers });
   const top = (list) => list.slice(0, k).map((c) => c.fullName);
   const kw = top(base), mm = top(after);
   const yesIn = (names) => names.filter((n) => labels[n] === "yes").length;

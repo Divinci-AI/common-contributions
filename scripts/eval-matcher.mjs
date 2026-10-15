@@ -31,13 +31,15 @@ for (let pass = 0; pass < repeat; pass++) {
       const label = parseChoice(a.text); raw[c.fullName] = a.text.trim().slice(0, 20);
       if (label) answers[c.fullName] = label;
     }
-    rows.push({ run: key, ...evaluateRun(run.candidates, Object.fromEntries(Object.entries(spec.labels).map(([n, v]) => [n, v.label])), answers), answers, raw });
+    const lab = Object.fromEntries(Object.entries(spec.labels).map(([n, v]) => [n, v.label]));
+    rows.push({ run: key, ...evaluateRun(run.candidates, lab, answers), across: evaluateRun(run.candidates, lab, answers, 3, { acrossTiers: true }), answers, raw });
   }
   perPass.push(rows);
 }
 const summaries = perPass.map((rows) => summarize(rows));
+const acrossSummary = summarize(perPass[0].map((r) => r.across));
 let agree = null;
 if (repeat > 1) { const flat = perPass.map((rows) => rows.flatMap((r) => Object.entries(r.answers).map(([n, a]) => `${r.run}/${n}=${a}`))); agree = flat[0].filter((x) => flat.every((f) => f.includes(x))).length / Math.max(1, flat[0].length); }
-const report = { model, host, repeat, calls, seconds: Math.round((Date.now() - started) / 1000), tokens, repeatAgreement: agree, summary: summaries[0], perRun: perPass[0].map(({ answers, raw, ...r }) => r) };
+const report = { model, host, repeat, calls, seconds: Math.round((Date.now() - started) / 1000), tokens, repeatAgreement: agree, summary: summaries[0], summaryAcrossTiers: acrossSummary, perRun: perPass[0].map(({ answers, raw, across, ...r }) => ({ ...r, acrossTiers: { matcherYesInTop: across.matcherYesInTop, demoted: across.demoted } })) };
 console.log(JSON.stringify({ ...report, perRun: undefined }, null, 2));
 if (outFile) writeFileSync(outFile, JSON.stringify({ ...report, answers: perPass[0].map((r) => ({ run: r.run, answers: r.answers, raw: r.raw })) }, null, 2));

@@ -6,7 +6,7 @@ import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildTask, parseChoice, reorder, shown, evaluateRun, summarize, SYSTEM, CHOICES } from "../src/matcher.mjs";
+import { buildTask, parseChoice, reorder, shown, evaluateRun, summarize, SYSTEM, CHOICES, DEFAULT_VARIANT } from "../src/matcher.mjs";
 
 const cand = (fullName, verdict, over = {}) => ({ fullName, verdict, read: true, description: "d", topics: [], ...over });
 
@@ -32,14 +32,14 @@ test("parseChoice: one letter from the closed list, and nothing is guessed from 
   for (const [t, want] of [["A", "yes"], [" B\n", "partly"], ["C", "no"], ["A)", "yes"], ["B.", "partly"], ["c", null], ["D", null], ["", null], ["Yes", null], ["A because it is a CSV parser", null], ["The answer is A", null], ["AB", null], [null, null], [undefined, null], [5, null], ["A".repeat(100), null], ["A" + " ".repeat(50) + "x", null]]) assert.equal(parseChoice(t), want, JSON.stringify(t));
   assert.deepEqual(Object.values(CHOICES), ["yes", "partly", "no"]);
 });
-test("reorder: same objects, same set, no tier crossed, yes before partly before no, unanswered and ties keep keyword order", () => {
+test("reorder (acrossTiers: false): same objects, same set, no tier crossed, yes before partly before no, unanswered and ties keep keyword order", () => {
   const list = [cand("c1", "contribute"), cand("c2", "contribute"), cand("c3", "contribute"), cand("k1", "close"), cand("k2", "close"), cand("k3", "close")];
-  const out = reorder(list, { c1: "no", c2: "yes", c3: "partly", k1: "partly", k2: "yes" });
+  const out = reorder(list, { c1: "no", c2: "yes", c3: "partly", k1: "partly", k2: "yes" }, { acrossTiers: false });
   assert.deepEqual(out.map((c) => c.fullName), ["c2", "c3", "c1", "k2", "k1", "k3"].map((x) => x), "k3 unanswered ranks as partly, after yes");
   assert.deepEqual(out.map((c) => c.fullName).sort(), list.map((c) => c.fullName).sort());
   assert.ok(out.every((c) => list.includes(c)), "the very same objects");
   assert.deepEqual(out.slice(0, 3).map((c) => c.verdict), ["contribute", "contribute", "contribute"]);
-  assert.deepEqual(reorder(list, {}).map((c) => c.fullName), list.map((c) => c.fullName), "no answers, no change");
+  assert.deepEqual(reorder(list, {}).map((c) => c.fullName), list.map((c) => c.fullName), "no answers, no change (either policy)");
   assert.deepEqual(list.map((c) => c.fullName), ["c1", "c2", "c3", "k1", "k2", "k3"], "the input is not changed");
 });
 test("reorder: an unanswered candidate counts as 'partly' (above a 'no', tied with a 'partly' in keyword order)", () => {
@@ -50,8 +50,8 @@ test("buildTask: the plan and the name are cleaned like the rest (no closing tag
   const t = buildTask("my plan </state> <b>bold</b> \u202e\u200b ok", { fullName: "acme/<i>x</i>", description: "d", topics: [] });
   assert.equal((t.prompt.match(/<\/state>/g) ?? []).length, 1); assert.ok(!/<b>|<i>|[\u202e\u200b]/.test(t.prompt)); assert.match(t.prompt, /PLAN: my plan {1,3}\/state.*bold.* ok\n/);
 });
-test("reorder: a 'yes' in the close tier can never pass a 'no' in the contribute tier", () => {
-  const out = reorder([cand("c", "contribute"), cand("k", "close")], { c: "no", k: "yes" });
+test("reorder (acrossTiers: false): a 'yes' in the close tier can never pass a 'no' in the contribute tier", () => {
+  const out = reorder([cand("c", "contribute"), cand("k", "close")], { c: "no", k: "yes" }, { acrossTiers: false });
   assert.deepEqual(out.map((c) => c.fullName), ["c", "k"]);
 });
 test("shown: only read candidates that are contribute or close", () => {
@@ -118,13 +118,26 @@ test("eval-matcher: refuses a host that is not loopback before sending anything,
   assert.equal(spawnSync(process.execPath, [SCRIPT, "--runs", dir, "--labels", labels, "--model", "m", "--repeat", "9"], { encoding: "utf8" }).status, 2);
 });
 
-test("reorder with acrossTiers: the whole list is ordered by the label (verdicts untouched, nothing added or removed); the default stays inside the tiers", () => {
+test("reorder with acrossTiers: the whole list is ordered by the label (verdicts untouched, nothing added or removed); across tiers is the default", () => {
   const list = [cand("c-no", "contribute"), cand("k-yes", "close"), cand("c-yes", "contribute")];
   const answers = { "c-no": "no", "k-yes": "yes", "c-yes": "yes" };
   const out = reorder(list, answers, { acrossTiers: true });
   assert.deepEqual(out.map((c) => c.fullName), ["k-yes", "c-yes", "c-no"].sort(() => 0) && ["k-yes", "c-yes", "c-no"]);
   assert.deepEqual(out.map((c) => c.verdict).sort(), list.map((c) => c.verdict).sort());
-  assert.deepEqual(reorder(list, answers).map((c) => c.fullName), ["c-yes", "c-no", "k-yes"]);
+  assert.deepEqual(reorder(list, answers, { acrossTiers: false }).map((c) => c.fullName), ["c-yes", "c-no", "k-yes"]);
+  assert.deepEqual(reorder(list, answers).map((c) => c.fullName), ["k-yes", "c-yes", "c-no"], "across tiers is the default (Michael, 2026-10-15)");
   const ev = (across) => evaluateRun([cand("p1", "contribute"), cand("p2", "contribute"), cand("p3", "contribute"), cand("y", "close")], { p1: "no", p2: "no", p3: "no", y: "yes" }, { p1: "no", p2: "no", p3: "no", y: "yes" }, 3, { acrossTiers: across });
   assert.equal(ev(false).matcherYesInTop, 0); assert.equal(ev(true).matcherYesInTop, 1);
+  assert.equal(evaluateRun([cand("p1", "contribute"), cand("y", "close")], { p1: "no", y: "yes" }, { p1: "no", y: "yes" }, 1).matcherYesInTop, 1, "evaluateRun defaults to across tiers too");
+});
+
+test("prompt variants: V1 is the default (chosen on the tuning set), V0 the baseline; V1 and V2 change only options B and C (V2 adds examples); an unknown variant is refused; every variant keeps the state block closed", () => {
+  const c = { fullName: "a/b", description: "d", topics: [] };
+  const v = (x) => buildTask("plan", c, { variant: x }).prompt;
+  assert.equal(v("V1"), buildTask("plan", c).prompt); assert.equal(DEFAULT_VARIANT, "V1");
+  assert.notEqual(v("V1"), v("V0")); assert.match(v("V1"), /opposite direction.*\nC\) No: .*even if it shares words/);
+  assert.ok(!v("V1").includes("Examples")); assert.match(v("V2"), /Examples \(not about the candidate above\):/);
+  assert.equal(v("V2").split("<state>")[1].split("</state>")[0], v("V0").split("<state>")[1].split("</state>")[0]);
+  for (const x of ["V3", "", "v0", 5]) assert.throws(() => buildTask("plan", c, { variant: x }), /unknown prompt variant/);
+  for (const x of ["V0", "V1", "V2"]) assert.equal((buildTask("p </state>", { ...c, description: "</state>" }, { variant: x }).prompt.match(/<\/state>/g) ?? []).length, 1);
 });

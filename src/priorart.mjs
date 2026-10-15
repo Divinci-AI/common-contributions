@@ -14,7 +14,7 @@ export const POLICY = Object.freeze({
   closeOverlap: 0.25,
   minResponseSamples: 5,      // fewer answered items than this and the response time is unknown
   responseMaxHours: 336,      // median hours to first reply (14 days)
-  minResponseRate: 0.5,       // share of the last 20 closed items that got a reply at all
+  minResponseRate: 0.25, // share of the last 20 closed items that got a reply at all (0.25 from the 2026-10-15 calibration: big healthy projects close by merging, without a comment)
   maxSoftFailures: 1,         // age, contributors and response are the soft criteria; more failures than this with a good match is a skip
   licenseOk: null,            // null = no restriction; otherwise a list of SPDX ids
 });
@@ -203,11 +203,11 @@ export function formatCandidate(c, i, { ghPath = null } = {}) {
  * The whole report. `searches` are the query strings that ran; `notRead` candidates were found but their details were not read;
  * `partial` carries the reason a run stopped early (a rate limit, an HTTP error). Only contribute / close are listed.
  */
-export function formatReport({ asOf, searches, candidates, notRead = 0, partial = null, found = null, terms = null, termsDropped = 0, ghPath = null, unread = [], nRead = null }) {
+export function formatReport({ asOf, searches, candidates, notRead = 0, partial = null, found = null, terms = null, termsDropped = 0, ghPath = null, unread = [], nRead = null, partialKind = "stopped" }) {
   const ranked = rank(candidates), shown = ranked.filter((c) => c.verdict === "contribute" || c.verdict === "close");
   const head = `prior-art: ${searches.length} search${searches.length === 1 ? "" : "es"}, ${candidates.length} candidate${candidates.length === 1 ? "" : "s"} scored${notRead ? `, ${notRead} not read` : ""}${found !== null && found > candidates.length + notRead ? ` (the broadest search matched ${found} repositories on GitHub; only the top results of each search were looked at)` : ""}${partial ? "   [PARTIAL]" : ""}  as of ${asOf}`;
   const out = [head];
-  if (partial) out.push(`stopped early: ${clean(partial, 160)}. The result below is incomplete.`);
+  if (partial) out.push(`${partialKind === "skipped" ? "some candidates were skipped" : "stopped early"}: ${clean(partial, 300)}. The result below is incomplete.`);
   if (terms) out.push(`matched on: ${terms.map((t) => clean(t, 40)).join(", ")}${termsDropped > 0 ? ` (${termsDropped} more word${termsDropped === 1 ? "" : "s"} in your description were not used)` : ""}${terms.length <= 2 ? `; only ${terms.length} searchable word${terms.length === 1 ? "" : "s"}, so matches are broad` : ""}`);
   if (shown.length === 0) out.push(nRead === 0 && (partial || notRead) ? "No candidate details were read, so nothing could be judged." : partial || notRead ? "Nothing decent found among the candidates that were read." : "Nothing decent found.");
   if (unread.length) out.push(`Found but not read: ${unread.slice(0, 10).map((u) => clean(u, 80)).join(", ")}${unread.length > 10 ? ` and ${unread.length - 10} more` : ""}`);

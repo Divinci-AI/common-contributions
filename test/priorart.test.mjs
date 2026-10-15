@@ -74,10 +74,9 @@ test("response: the answer RATE needs 5 closed items, the MEDIAN needs 5 answere
   const r = (responded, h, considered = 20) => facts({ response: { considered, responded, hours: hours(responded, h) } });
   assert.equal(verdict(repo(), r(12, 336)), "contribute");
   assert.equal(verdict(repo(), r(12, 337)), "close");
-  assert.equal(verdict(repo(), r(10, 10)), "contribute", "10 of 20 is exactly the minimum rate");
-  assert.equal(verdict(repo(), r(9, 10)), "close", "9 of 20 is below it");
+  assert.equal(verdict(repo(), r(5, 10)), "contribute", "5 of 20 is exactly the minimum rate (0.25)");
+  assert.equal(verdict(repo(), r(4, 10)), "close", "4 of 20 is below it");
   for (const n of [0, 4]) { const bad = score(repo(), r(n, 10)); assert.equal(bad.verdict, "close", `${n} of 20 answered is a measured failure, not an unknown`); assert.match(bad.failures.join(), /slow or missing replies \(\d of 20 answered\)/); assert.deepEqual(bad.unknowns, []); }
-  assert.equal(verdict(repo(), r(5, 10, 20)), "close", "5 answered of 20 is a 25% rate");
   const few = score(repo(), r(3, 10, 4)); assert.equal(few.verdict, "contribute", "4 closed items is too few to measure anything"); assert.match(few.unknowns.join(), /fewer than 5 closed items/);
   assert.equal(verdict(repo(), facts({ response: { considered: 0, responded: 0, hours: [] } })), "contribute");
   const med = score(repo(), facts({ response: { considered: 6, responded: 6, hours: [1, 1, 1, 1000, 1000, 1000] } }));
@@ -307,4 +306,10 @@ test("a run-one line that clean() would alter is not printed at all", () => {
   const yes = score(repo(), facts({ optin: OPTED }));
   assert.equal(runOneLine(yes, "/opt/my  tools/gh"), null); assert.equal(runOneLine(yes, "/" + "x".repeat(2100)), null);
   assert.ok(!/[<>]/.test(runOneLine(yes, "/usr/bin/gh")));
+});
+
+test("the calibrated default: a famous project that closes by merging (4 of 13 answered... 31%) passes the reply rate; a dead one (2 of 15) does not", () => {
+  assert.equal(POLICY.minResponseRate, 0.25);
+  const r = (responded, considered) => facts({ response: { considered, responded, hours: hours(responded, 20) } });
+  assert.equal(verdict(repo(), r(4, 13)), "contribute"); assert.equal(verdict(repo(), r(2, 15)), "close");
 });

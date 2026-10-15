@@ -147,25 +147,32 @@ export function runPriorArt(argv, { run, now, maxSearches = MAX_SEARCHES }) {
   const scored = settled.map((s) => s.pre);
   const unread = order.slice(args.limit).map((pre) => pre.fullName);
   let nRead = 0;
+  // A rate limit or any surprise stops the run. A timeout or a server error on ONE candidate only skips that candidate (and names it), because
+  // one slow repository must not abandon the rest; three in a row means GitHub itself is struggling, so that stops too.
+  const transient = (e) => (e.httpStatus === undefined && /\(no response\)/.test(e.message)) || e.httpStatus >= 500;
+  const skippedNames = [];
+  let streak = 0, kind = "stopped";
   for (let i = 0; i < toRead.length; i++) {
     const { repo } = toRead[i];
     if (partial) { notRead++; unread.push(repo.fullName); continue; }
     try {
       const facts = search.facts(repo, { since, now });
       scored.push(scoreCandidate({ repo, facts, terms, policy: args.policy, now }));
-      nRead++;
+      nRead++; streak = 0;
     } catch (e) {
       if (!(e instanceof GhError)) throw e;
-      partial = `reading ${clean(repo.fullName, 80)}: ${why(e)}`;
       notRead++;
       unread.push(repo.fullName);
+      if (transient(e) && ++streak < 3) { skippedNames.push(clean(repo.fullName, 80)); continue; }
+      partial = `reading ${clean(repo.fullName, 80)}: ${why(e)}`;
     }
   }
+  if (!partial && skippedNames.length) { kind = "skipped"; partial = `${skippedNames.length} candidate${skippedNames.length === 1 ? "" : "s"} could not be read (a timeout or a server error on GitHub's side): ${skippedNames.join(", ")}`; }
 
   if (args.json) {
     const out = { asOf, terms, termsDropped, searches: ran, partial, notRead, found, unread, candidates: rank(scored).map((c) => ({ ...c, runOne: runOneLine(c, args.gh) })), caveats: CAVEATS };
     return { code: partial ? 3 : 0, stdout: JSON.stringify(out, null, 2) + "\n", stderr: "" };
   }
-  const text = formatReport({ asOf, searches: ran, candidates: scored, notRead, partial, terms, termsDropped, ghPath: args.gh, found, unread, nRead });
+  const text = formatReport({ asOf, searches: ran, candidates: scored, notRead, partial, terms, termsDropped, ghPath: args.gh, found, unread, nRead, partialKind: kind });
   return { code: partial ? 3 : 0, stdout: text + "\n", stderr: "" };
 }

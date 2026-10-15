@@ -376,3 +376,35 @@ test("a fork that slips through the search is skipped, not recommended", () => {
   const r = go(A(), build([item(5001, "acme/csvkit", "Fast streaming CSV parser", { fork: true })]));
   assert.match(r.stdout, /Skipped \(1\): acme\/csvkit \(a fork/);
 });
+
+// ---- one slow read must not abandon the run (calibration finding, 2026-10-15) --------------------------------------------------------
+
+const slowOn = (b, ids, mk) => (args) => { const j = args.join(" "); return ids.some((id) => j.includes(`/repositories/${id}/commits`)) ? mk() : b.run(args); };
+const four = Array.from({ length: 4 }, (_, i) => item(7000 + i, `acme/csv${i}`, "Streaming CSV parser", { pushed_at: `2026-09-${20 - i}T10:00:00Z` }));
+
+test("a timeout or server error on ONE candidate skips just that candidate, names it, and the run is still labelled PARTIAL", () => {
+  for (const mk of [() => ({ status: 1, stdout: "", stderr: "" }), () => ({ status: 1, stdout: "", stderr: "gh: Server Error (HTTP 502)" })]) {
+    const b = build(four);
+    const r = runPriorArt(A(), { run: slowOn(b, [7001], mk), now: NOW });
+    assert.equal(r.code, 3);
+    assert.match(r.stdout, /\[PARTIAL\]/); assert.match(r.stdout, /1 candidate could not be read.*acme\/csv1/);
+    assert.equal((r.stdout.match(/^\d+\. acme\/csv\d/gm) ?? []).length, 3, "the other three were still read and shown");
+    assert.match(r.stdout, /Found but not read: acme\/csv1/);
+  }
+});
+test("a rate limit still stops the run at once; so do three slow reads in a row, and a surprise answer", () => {
+  const rate = runPriorArt(A(), { run: slowOn(build(four), [7000], () => ({ status: 1, stdout: "", stderr: "gh: rate limit (HTTP 403)" })), now: NOW });
+  assert.match(rate.stdout, /stopped early: reading acme\/csv0/); assert.match(rate.stdout, /3 not read|Found but not read: acme\/csv0, acme\/csv1, acme\/csv2, acme\/csv3/);
+  const b = build(four);
+  const three = runPriorArt(A(), { run: slowOn(b, [7000, 7001, 7002], () => ({ status: 1, stdout: "", stderr: "" })), now: NOW });
+  assert.match(three.stdout, /stopped early: reading acme\/csv2/); assert.match(three.stdout, /Found but not read: acme\/csv0, acme\/csv1, acme\/csv2, acme\/csv3/);
+  const odd = runPriorArt(A(), { run: slowOn(build(four), [7000], () => ({ status: 0, stdout: "{}", stderr: "" })), now: NOW });
+  assert.match(odd.stdout, /stopped early: reading acme\/csv0/);
+});
+test("the 'three in a row' count restarts after a successful read; a bug (not a GitHub error) while reading is not swallowed", () => {
+  const b = build(four);
+  const r = runPriorArt(A(), { run: slowOn(b, [7000, 7001, 7003], () => ({ status: 1, stdout: "", stderr: "" })), now: NOW });
+  assert.doesNotMatch(r.stdout, /stopped early/); assert.match(r.stdout, /some candidates were skipped: 3 candidates could not be read/);
+  assert.equal((r.stdout.match(/^\d+\. acme\/csv\d/gm) ?? []).length, 1);
+  assert.throws(() => runPriorArt(A(), { run: slowOn(build(four), [7000], () => { throw new TypeError("boom"); }), now: NOW }), TypeError);
+});

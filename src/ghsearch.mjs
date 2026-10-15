@@ -81,43 +81,52 @@ const methods = (run) => {
   };
 
   /**
-   * People with commits since `since` among the most recent 100 commits. Bots are counted apart. A full page means "at least": that can only
-   * UNDER-count a busy project, which makes it look less alive, never more. An author GitHub cannot link to an account is counted by email
-   * (kept in memory only, never returned).
+   * People with commits since `since` among the most recent 100 commits. Bots are counted apart. A full page means "at least".
+   * A person can appear under two keys: an account id (commit linked to an account) and an email (commit GitHub could not link). An email seen
+   * on a linked commit is merged into that account; a remaining email-only author may still be someone already counted under another address, so
+   * those are reported apart as `unlinked` and the scorer does not let them carry the count over the minimum. (Assumption, not verified offline:
+   * GitHub applies `since` before paging, which is what makes a short page an exact count.)
    */
   const recentContributors = (id, since) => {
     if (!isDate(since)) throw new GhError("since: an ISO date like 2025-10-13T00:00:00Z");
     const r = absentIs([409], `/repositories/${id}/commits?since=${encodeURIComponent(since)}&per_page=${LIMITS.commitsPage}&page=1`, []);
     if (!Array.isArray(r) || r.length > LIMITS.commitsPage) throw new GhError("commits: expected a list");
-    const people = new Set(), bots = new Set();
+    const accounts = new Set(), bots = new Set(), linkedEmails = new Set(), emailOnly = new Set();
     for (const c of r) {
       if (!c || typeof c !== "object" || !SHA.test(c.sha ?? "")) throw new GhError("commits: an item has an unexpected shape");
-      const a = c.author;
-      if (a && typeof a === "object" && Number.isInteger(a.id)) { (a.type === "Bot" ? bots : people).add(a.id); continue; }
-      const email = c.commit?.author?.email;
-      if (typeof email !== "string" || email.length === 0) throw new GhError("commits: a commit has no author");
-      people.add(`email:${email.toLowerCase()}`);
+      const a = c.author, email = typeof c.commit?.author?.email === "string" ? c.commit.author.email.toLowerCase() : "";
+      if (a && typeof a === "object" && Number.isInteger(a.id)) { (a.type === "Bot" ? bots : accounts).add(a.id); if (email) linkedEmails.add(email); continue; }
+      if (email.length === 0) throw new GhError("commits: a commit has no author");
+      emailOnly.add(email);
     }
-    return { contributors: people.size, bots: bots.size, commits: r.length, atLeast: r.length === LIMITS.commitsPage };
+    const unlinked = [...emailOnly].filter((e) => !linkedEmails.has(e)).length;
+    return { contributors: accounts.size + unlinked, unlinked, bots: bots.size, commits: r.length, atLeast: r.length === LIMITS.commitsPage };
   };
 
   /**
    * Hours until someone other than the author, and not a bot, first commented or reviewed, for the last 20 closed issues and pull requests
-   * (most recently updated first). One GraphQL read. `responded` < `considered` means some had no reply among the first 5 comments and reviews.
+   * (most recently UPDATED first, not most recently closed). One GraphQL read. An item only counts as "considered" if someone else could have
+   * answered it: bot-authored items and items opened by the project's own owner, members and collaborators are left out, and so is an item whose
+   * first 5 comments are all the author's own while more exist (we cannot tell if it was answered). `responded` < `considered` means no reply.
+   * The repository is looked up by the name the search just returned; an empty answer therefore reads as "could not measure", never as a fact.
    */
   const responseTimes = (fullName) => {
     if (!goodName(fullName)) throw new GhError("repository must be owner/name");
-    const reply = "createdAt author{login __typename}";
-    const q = `query($q:String!){search(query:$q,type:ISSUE,first:${LIMITS.responseWindow}){nodes{__typename ... on Issue{createdAt author{login __typename} comments(first:${LIMITS.responseReplies}){nodes{${reply}}}} ... on PullRequest{createdAt author{login __typename} comments(first:${LIMITS.responseReplies}){nodes{${reply}}} reviews(first:${LIMITS.responseReplies}){nodes{${reply}}}}}}}`;
+    const reply = "createdAt author{login __typename}", who = "author{login __typename} authorAssociation";
+    const q = `query($q:String!){search(query:$q,type:ISSUE,first:${LIMITS.responseWindow}){nodes{__typename ... on Issue{createdAt ${who} comments(first:${LIMITS.responseReplies}){totalCount nodes{${reply}}}} ... on PullRequest{createdAt ${who} comments(first:${LIMITS.responseReplies}){totalCount nodes{${reply}}} reviews(first:${LIMITS.responseReplies}){totalCount nodes{${reply}}}}}}}`;
     const r = run(["api", "graphql", "-f", `query=${q}`, "-f", `q=repo:${fullName} is:closed sort:updated-desc`]);
     let j; try { j = JSON.parse(r.stdout); } catch { throw new GhError(r.status !== 0 ? "GitHub GraphQL request failed (response times)" : "GraphQL answer is not JSON (response times)"); }
     if (r.status !== 0 || (Array.isArray(j?.errors) && j.errors.length > 0)) throw new GhError("GitHub GraphQL request failed (response times)");
     const nodes = j?.data?.search?.nodes;
     if (!Array.isArray(nodes) || nodes.length > LIMITS.responseWindow) throw new GhError("GraphQL answer has no search results (response times)");
     const hours = [];
+    let considered = 0;
     for (const n of nodes) {
       if (!n || typeof n !== "object" || !["Issue", "PullRequest"].includes(n.__typename) || !isDate(n.createdAt)) throw new GhError("response times: an item has an unexpected shape");
+      if (n.author?.__typename && n.author.__typename !== "User") continue; // a bot's or a mannequin's item is nobody's to answer
+      if (["OWNER", "MEMBER", "COLLABORATOR"].includes(n.authorAssociation)) continue; // the project's own people do not wait for the project
       const list = [...(n.comments?.nodes ?? []), ...(n.reviews?.nodes ?? [])];
+      const more = (n.comments?.totalCount ?? 0) > (n.comments?.nodes?.length ?? 0) || (n.reviews?.totalCount ?? 0) > (n.reviews?.nodes?.length ?? 0);
       const opened = Date.parse(n.createdAt);
       let first = null;
       for (const c of list) {
@@ -128,9 +137,10 @@ const methods = (run) => {
         if (t < opened) throw new GhError("response times: a reply is dated before the item");
         if (first === null || t < first) first = t;
       }
-      if (first !== null) hours.push(Math.round(((first - opened) / 3600000) * 10) / 10);
+      if (first !== null) { hours.push(Math.round(((first - opened) / 3600000) * 10) / 10); considered++; }
+      else if (!more) considered++; // an item we saw every comment of, and nobody else answered; otherwise it is unknown and left out
     }
-    return { considered: nodes.length, responded: hours.length, hours };
+    return { considered, responded: hours.length, hours };
   };
 
   /**
@@ -160,7 +170,7 @@ const methods = (run) => {
     let f;
     try { f = gh.file(id, OPTIN_PATH, ref); } catch (e) {
       if (!(e instanceof GhError)) throw e;
-      if (e.httpStatus === 404) return { present: false };
+      if (e.httpStatus === 404 || e.httpStatus === 409) return { present: false }; // 409: an empty repository
       // Only the file's own problems (a directory, a symlink, too large, not base64: all worded "opt-in ..." by gh.file) make it invalid.
       // A rate limit, a server error, a malformed answer or the call cap is a stop.
       if (e.httpStatus !== undefined || !/^opt-in /.test(e.message)) throw e;
@@ -179,7 +189,7 @@ export function createSearch(run) {
   return {
     ...methods(run),
     /**
-     * Everything the report needs about one candidate: at most 4 reads, plus one more only when the project carries an opt-in file.
+     * Everything the report needs about one candidate: at most 4 reads, plus one more when the project carries an opt-in file or the file listing is missing, truncated or unavailable.
      * A GitHub error stops it (the caller labels the run PARTIAL); only "the endpoint could not say" is `null`.
      */
     facts(cand, { since, now = Date.now(), maxCalls = LIMITS.maxDetailCalls }) {

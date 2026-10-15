@@ -82,7 +82,10 @@ export function scoreCandidate({ repo, facts = null, terms, policy = POLICY, now
   const c = cRaw && count(cRaw.contributors) && typeof cRaw.atLeast === "boolean" ? cRaw : null;
   // contributors: a lower bound that fails the minimum proves nothing, so it is unknown
   let contributors = null;
-  if (c) contributors = c.contributors >= policy.minContributors ? { count: c.contributors, atLeast: c.atLeast, ok: true } : c.atLeast ? null : { count: c.contributors, atLeast: false, ok: false };
+  // Authors GitHub could not link to an account may be one person under two addresses, so they cannot carry the count over the minimum.
+  const solid = c ? c.contributors - (Number.isInteger(c.unlinked) && c.unlinked >= 0 && c.unlinked <= c.contributors ? c.unlinked : 0) : 0;
+  const unlinkedDoubt = c !== null && c.contributors >= policy.minContributors && solid < policy.minContributors;
+  if (c) contributors = unlinkedDoubt ? null : c.contributors >= policy.minContributors ? { count: c.contributors, atLeast: c.atLeast, ok: true } : c.atLeast ? null : { count: c.contributors, atLeast: false, ok: false };
   const rRaw = facts?.response ?? null;
   const r = rRaw && count(rRaw.considered) && count(rRaw.responded) && rRaw.responded <= rRaw.considered && Array.isArray(rRaw.hours) && rRaw.hours.length === rRaw.responded && rRaw.hours.every((h) => Number.isFinite(h) && h >= 0) ? rRaw : null;
   // response: two separate measurements. The answer RATE needs enough closed items; the MEDIAN needs enough answered ones.
@@ -109,6 +112,7 @@ export function scoreCandidate({ repo, facts = null, terms, policy = POLICY, now
 
   // ---- skip: things no amount of matching rescues
   if (repo.archived === true) { failures.push("archived"); return done("skip"); }
+  if (repo.fork === true) { failures.push("a fork (contribute to the original)"); return done("skip"); }
   if (policy.licenseOk && licenseKnown && !inList(policy.licenseOk)) { failures.push(`license ${license} is outside your list`); return done("skip"); }
   if (ageDays !== null && ageDays > policy.maxAgeDays * policy.skipAgeFactor) { failures.push(`last push ${ageDays} days ago`); return done("skip"); }
   if (ov.fraction < policy.closeOverlap) return done("no-match");
@@ -119,7 +123,7 @@ export function scoreCandidate({ repo, facts = null, terms, policy = POLICY, now
   const silent = c !== null && c.contributors === 0 && !c.atLeast;
   const aged = ageDays !== null && ageDays > policy.maxAgeDays;
   if (ageDays === null) unknowns.push("last push date"); else if (aged) failures.push(`last push ${ageDays} days ago (limit ${policy.maxAgeDays})${silent ? ", and no commits in the last year" : ""}`);
-  if (contributors === null) unknowns.push(!facts ? "contributors (not read)" : c ? "contributors (only a lower bound)" : "contributors (not available)");
+  if (contributors === null) unknowns.push(!facts ? "contributors (not read)" : unlinkedDoubt ? "contributors (some authors are not linked to accounts and may be counted twice)" : c ? "contributors (only a lower bound)" : "contributors (not available)");
   else if (!contributors.ok && !(aged && silent)) failures.push(`${contributors.count} contributor${contributors.count === 1 ? "" : "s"} in the last year (minimum ${policy.minContributors})`);
   if (response === null) unknowns.push(!facts ? "first response time (not read)" : `first response time (fewer than ${policy.minResponseSamples} closed items seen)`);
   else if (!response.ok) failures.push(`slow or missing replies (${response.responded} of ${response.considered} answered${response.medMeasured ? `, median ${fmtHours(response.medianHours)}` : ""})`);
@@ -161,21 +165,26 @@ const SLUG = /^[A-Za-z0-9._-]{1,100}\/[A-Za-z0-9._-]{1,100}$/;
 const shellWord = (w) => (/^[A-Za-z0-9_\/.@+:-]+$/.test(w) ? w : `'${w.replace(/'/g, `'\\''`)}'`);
 /**
  * The command a person could run to start work on a project that has a valid, unpaused opt-in file, or null. NOTHING is run by prior-art.
- * The angle-bracket parts are the person's own (their issues file, the issue, their clone, their model): a shell refuses them if pasted unedited.
+ * The CAPITAL words are the person's own (their issues file, the issue, their clone, their model). They are plain words, not <brackets>: brackets are
+ * shell redirections, and a person who edited only some of them would have run the command with stdin and stdout redirected.
  * Only for contribute and close; a skipped or unrelated project never gets a line. `ghPath` is the absolute gh the person gave.
  */
 export function runOneLine(c, ghPath) {
   if (!c || (c.verdict !== "contribute" && c.verdict !== "close") || c.optin?.status !== "yes") return null;
   if (typeof c.fullName !== "string" || !SLUG.test(c.fullName) || c.fullName.split("/").some((x) => x === "." || x === "..")) return null;
   if (typeof ghPath !== "string" || !ghPath.startsWith("/") || /[\u0000-\u001f\u007f]/.test(ghPath)) return null;
-  return `node src/cli.mjs run-one <issues.json> <issue-number> --repo <your-clone-of-${c.fullName.split("/")[1]}> --model <ollama-model> --github ${c.fullName} --gh ${shellWord(ghPath)}`;
+  const line = `node src/cli.mjs run-one ISSUES_JSON ISSUE_NUMBER --repo YOUR_CLONE_OF_${c.fullName.split("/")[1].replace(/[^A-Za-z0-9]/g, "_").toUpperCase()} --model OLLAMA_MODEL --github ${c.fullName} --gh ${shellWord(ghPath)}`;
+  return clean(line, 2000) === line ? line : null; // printed exactly or not at all: a line that had to be altered to be shown could run differently
 }
+
+/** Said by every report, in either form. */
+export const CAVEATS = ["This is keyword matching on names, descriptions and topics, not understanding, and it does not prove nothing better exists.", "A recommendation to contribute is not a promise the project wants it."];
 
 /** Numbers first, then the verdict. Every string is cleaned again here, so a caller that forgot cannot print an escape sequence. */
 export function formatCandidate(c, i, { ghPath = null } = {}) {
   const n = c.numbers;
   const contributors = n.contributors ? `${n.contributors.count}${n.contributors.atLeast ? "+" : ""} commit author${n.contributors.count === 1 && !n.contributors.atLeast ? "" : "s"} in the last year` : "commit authors unknown";
-  const response = n.response && n.response.responded > 0 ? `first non-author reply median ${fmtHours(n.response.medianHours)} (${n.response.responded} of ${n.response.considered} answered)` : n.response && n.response.considered === 0 ? "no closed issues or PRs to measure" : n.response ? `no replies seen in ${n.response.considered} closed item${n.response.considered === 1 ? "" : "s"}` : "first reply unknown";
+  const response = n.response && n.response.responded > 0 ? `first non-author reply median ${fmtHours(n.response.medianHours)} (${n.response.responded} of ${n.response.considered} answered)` : n.response && n.response.considered === 0 ? "no closed issues or PRs found to measure (or the lookup came back empty)" : n.response ? `no replies seen in ${n.response.considered} closed item${n.response.considered === 1 ? "" : "s"}` : "first reply unknown";
   const lines = [
     `${i}. ${clean(c.fullName, 120)}  ${clean(c.url, 160)}`,
     `   numbers: ${n.license ? clean(n.license, 40) : "no license detected"} · pushed ${day(n.pushedAt)}${n.ageDays !== null ? ` (${n.ageDays}d ago)` : ""} · ${contributors} · ${response} · release ${!c.read ? "unknown (not read)" : n.lastReleaseAt ? day(n.lastReleaseAt) : "none on GitHub"} · CI ${yn(n.ci)} · tests ${yn(n.tests)} · overlap ${pct(c.overlap.fraction)} (${c.overlap.matched.map((t) => clean(t, 40)).join(", ") || "none"} of ${c.overlap.of} terms)`,
@@ -185,7 +194,7 @@ export function formatCandidate(c, i, { ghPath = null } = {}) {
   if (c.notes.length) lines.push(`   note: ${c.notes.map((x) => clean(x, 120)).join("; ")}`);
   lines.push(`   ${clean(c.optin.text, 400)}`);
   const start = runOneLine(c, ghPath);
-  if (start) lines.push("   to start (nothing is run for you; pick an issue the maintainer labelled for agents, and keep to their interval):", `   ${clean(start, 400)}`);
+  if (start) lines.push("   to start (nothing is run for you; replace the CAPITAL words, pick an issue the maintainer labelled for agents, and keep to their interval):", `   ${start}`);
   if (c.description) lines.push(`   "${clean(c.description, 160)}"`);
   return lines.join("\n");
 }
@@ -194,16 +203,17 @@ export function formatCandidate(c, i, { ghPath = null } = {}) {
  * The whole report. `searches` are the query strings that ran; `notRead` candidates were found but their details were not read;
  * `partial` carries the reason a run stopped early (a rate limit, an HTTP error). Only contribute / close are listed.
  */
-export function formatReport({ asOf, searches, candidates, notRead = 0, partial = null, found = null, terms = null, termsDropped = 0, ghPath = null }) {
+export function formatReport({ asOf, searches, candidates, notRead = 0, partial = null, found = null, terms = null, termsDropped = 0, ghPath = null, unread = [], nRead = null }) {
   const ranked = rank(candidates), shown = ranked.filter((c) => c.verdict === "contribute" || c.verdict === "close");
-  const head = `prior-art: ${searches.length} search${searches.length === 1 ? "" : "es"}, ${candidates.length} candidate${candidates.length === 1 ? "" : "s"} scored${notRead ? `, ${notRead} not read` : ""}${found !== null ? ` (GitHub reports ${found} matching repositories in all)` : ""}${partial ? "   [PARTIAL]" : ""}  as of ${asOf}`;
+  const head = `prior-art: ${searches.length} search${searches.length === 1 ? "" : "es"}, ${candidates.length} candidate${candidates.length === 1 ? "" : "s"} scored${notRead ? `, ${notRead} not read` : ""}${found !== null && found > candidates.length + notRead ? ` (the broadest search matched ${found} repositories on GitHub; only the top results of each search were looked at)` : ""}${partial ? "   [PARTIAL]" : ""}  as of ${asOf}`;
   const out = [head];
   if (partial) out.push(`stopped early: ${clean(partial, 160)}. The result below is incomplete.`);
   if (terms) out.push(`matched on: ${terms.map((t) => clean(t, 40)).join(", ")}${termsDropped > 0 ? ` (${termsDropped} more word${termsDropped === 1 ? "" : "s"} in your description were not used)` : ""}${terms.length <= 2 ? `; only ${terms.length} searchable word${terms.length === 1 ? "" : "s"}, so matches are broad` : ""}`);
-  if (shown.length === 0) out.push(partial || notRead ? "Nothing decent found among the candidates that were read." : "Nothing decent found.");
+  if (shown.length === 0) out.push(nRead === 0 && (partial || notRead) ? "No candidate details were read, so nothing could be judged." : partial || notRead ? "Nothing decent found among the candidates that were read." : "Nothing decent found.");
+  if (unread.length) out.push(`Found but not read: ${unread.slice(0, 10).map((u) => clean(u, 80)).join(", ")}${unread.length > 10 ? ` and ${unread.length - 10} more` : ""}`);
   shown.forEach((c, i) => out.push("", formatCandidate(c, i + 1, { ghPath })));
   const skipped = ranked.filter((c) => c.verdict === "skip");
   if (skipped.length) out.push("", `Skipped (${skipped.length}): ${skipped.map((c) => `${clean(c.fullName, 80)} (${clean(c.failures.join("; ") || "several criteria fail", 110)})`).join("; ")}`);
-  out.push("", "This is keyword matching on names, descriptions and topics, not understanding, and it does not prove nothing better exists.", "A recommendation to contribute is not a promise the project wants it.", `Searches: ${searches.map((s) => clean(s, 200)).join(" | ")}`);
+  out.push("", ...CAVEATS, `Searches: ${searches.map((s) => clean(s, 200)).join(" | ")}`);
   return out.join("\n");
 }

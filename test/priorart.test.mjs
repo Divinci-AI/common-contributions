@@ -189,7 +189,7 @@ test("formatReport: header, partial label, nothing-found line, honesty lines and
   assert.match(none.split("\n")[0], /^prior-art: 2 searches, 1 candidate scored {2}as of 2026-10-13T08:00Z$/);
   assert.match(none, /Nothing decent found\./); assert.match(none, /does not prove nothing better exists/); assert.match(none, /not a promise the project wants it/); assert.match(none, /Searches: q1 \| q2/);
   const some = formatReport({ asOf: "t", searches: ["q"], candidates: [score(repo()), score(repo({ fullName: "old/one", url: "https://github.com/old/one", archived: true }))], notRead: 2, partial: "GitHub request failed (HTTP 403)", found: 431 });
-  assert.match(some.split("\n")[0], /2 candidates scored, 2 not read \(GitHub reports 431 matching repositories in all\) {3}\[PARTIAL\] {2}as of t$/);
+  assert.match(some.split("\n")[0], /2 candidates scored, 2 not read \(the broadest search matched 431 repositories on GitHub; only the top results of each search were looked at\) {3}\[PARTIAL\] {2}as of t$/);
   assert.match(some, /stopped early: GitHub request failed \(HTTP 403\)\. The result below is incomplete\./);
   assert.match(some, /1\. acme\/csvkit/); assert.match(some, /Skipped \(1\): old\/one \(archived\)/); assert.ok(!some.includes("Nothing decent found"));
 });
@@ -254,7 +254,7 @@ test("the report names the words it matched on, says when words were dropped or 
 test("wording: singular and plural, nothing to measure, and a skipped project shows every reason it failed", () => {
   const one = formatCandidate(score(repo(), facts({ contributors: { contributors: 1, bots: 0, commits: 1, atLeast: false }, response: { considered: 1, responded: 0, hours: [] } })), 1);
   assert.match(one, /1 commit author in the last year/); assert.match(one, /no replies seen in 1 closed item ·/);
-  assert.match(formatCandidate(score(repo(), facts({ response: { considered: 0, responded: 0, hours: [] } })), 1), /no closed issues or PRs to measure/);
+  assert.match(formatCandidate(score(repo(), facts({ response: { considered: 0, responded: 0, hours: [] } })), 1), /no closed issues or PRs found to measure/);
   assert.match(formatCandidate(score(repo(), facts({ contributors: { contributors: 100, bots: 0, commits: 100, atLeast: true } })), 1), /100\+ commit authors in the last year/);
   const two = score(repo({ pushedAt: ago(400) }), facts({ contributors: { contributors: 1, bots: 0, commits: 1, atLeast: false } }));
   assert.equal(two.verdict, "skip");
@@ -267,7 +267,7 @@ import { runOneLine } from "../src/priorart.mjs";
 const OPTED = { present: true, valid: true, paused: false, intervalHours: 48, contact: "@maintainer", reviewBy: "2027-01-01" };
 test("runOneLine: only for contribute or close with a valid, unpaused opt-in; exact flags; the person's own parts are placeholders", () => {
   const yes = score(repo(), facts({ optin: OPTED }));
-  assert.equal(runOneLine(yes, "/opt/homebrew/bin/gh"), "node src/cli.mjs run-one <issues.json> <issue-number> --repo <your-clone-of-csvkit> --model <ollama-model> --github acme/csvkit --gh /opt/homebrew/bin/gh");
+  assert.equal(runOneLine(yes, "/opt/homebrew/bin/gh"), "node src/cli.mjs run-one ISSUES_JSON ISSUE_NUMBER --repo YOUR_CLONE_OF_CSVKIT --model OLLAMA_MODEL --github acme/csvkit --gh /opt/homebrew/bin/gh");
   assert.match(formatCandidate(yes, 1, { ghPath: "/opt/homebrew/bin/gh" }), /to start \(nothing is run for you.*\n {3}node src\/cli\.mjs run-one .* --github acme\/csvkit --gh \/opt\/homebrew\/bin\/gh/);
   const close = score(repo({ description: "csv" }), facts({ optin: OPTED }));
   assert.equal(close.verdict, "close"); assert.ok(runOneLine(close, "/usr/bin/gh"));
@@ -285,4 +285,26 @@ test("runOneLine: names and the gh path are checked and quoted, so nothing in th
   assert.match(runOneLine(yes("acme/x"), "/Users/me/my tools/gh"), /--gh '\/Users\/me\/my tools\/gh'$/);
   assert.match(runOneLine(yes("acme/x"), "/Users/o'brien/gh"), /--gh '\/Users\/o'\\''brien\/gh'$/);
   assert.match(runOneLine(yes("acme/x"), "/a/$(id)/gh"), /--gh '\/a\/\$\(id\)\/gh'$/);
+});
+
+test("authors GitHub could not link to an account may be one person twice: they cannot carry the count over the minimum", () => {
+  const f = (contributors, unlinked) => facts({ contributors: { contributors, unlinked, bots: 0, commits: 10, atLeast: false } });
+  assert.equal(verdict(repo(), f(2, 0)), "contribute");
+  const doubt = score(repo(), f(2, 1)); assert.equal(doubt.verdict, "close"); assert.deepEqual(doubt.failures, []); assert.match(doubt.unknowns.join(), /not linked to accounts/);
+  assert.equal(verdict(repo(), f(3, 1)), "contribute", "two solid account holders already pass");
+  assert.equal(verdict(repo(), facts({ contributors: { contributors: 2, bots: 0, commits: 10, atLeast: false } })), "contribute", "no unlinked field: as before");
+  assert.equal(verdict(repo(), f(2, 5)), "contribute", "an impossible unlinked count is ignored, not trusted");
+});
+test("a fork is skipped whatever the match", () => { const s = score(repo({ fork: true })); assert.equal(s.verdict, "skip"); assert.match(s.failures.join(), /fork/); });
+test("formatReport: with nothing read it says so, names what was found, and the standing caveats are exported for the JSON form", async () => {
+  const { CAVEATS } = await import("../src/priorart.mjs");
+  assert.equal(CAVEATS.length, 2);
+  const r = formatReport({ asOf: "t", searches: ["q"], candidates: [], notRead: 2, partial: "HTTP 403", unread: ["a/csv", "b/csv"], nRead: 0 });
+  assert.match(r, /No candidate details were read, so nothing could be judged\./); assert.match(r, /Found but not read: a\/csv, b\/csv/); assert.ok(!r.includes("Nothing decent found"));
+  assert.match(formatReport({ asOf: "t", searches: ["q"], candidates: [], unread: Array.from({ length: 12 }, (_, i) => `a/r${i}`), nRead: 0, notRead: 12 }), /a\/r9 and 2 more/);
+});
+test("a run-one line that clean() would alter is not printed at all", () => {
+  const yes = score(repo(), facts({ optin: OPTED }));
+  assert.equal(runOneLine(yes, "/opt/my  tools/gh"), null); assert.equal(runOneLine(yes, "/" + "x".repeat(2100)), null);
+  assert.ok(!/[<>]/.test(runOneLine(yes, "/usr/bin/gh")));
 });

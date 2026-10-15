@@ -19,7 +19,7 @@ export function ghRunner(ghPath) {
   };
 }
 
-const HEADERS = ["-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28"];
+export const HEADERS = ["-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28"];
 const num = (v) => Number.isInteger(v) && v >= 0;
 const str = (v) => typeof v === "string";
 const need = (o, shape, what) => {

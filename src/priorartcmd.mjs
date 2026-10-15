@@ -7,14 +7,15 @@
  *   exit 1  nothing could be searched at all (no report: "nothing found" would be a lie)      exit 2  bad arguments
  */
 import { createSearch, clean, LIMITS } from "./ghsearch.mjs";
-import { GhError } from "./ghclient.mjs";
-import { extractTerms, overlap, makePolicy, scoreCandidate, rank, formatReport, runOneLine } from "./priorart.mjs";
+import { GhError, HEADERS } from "./ghclient.mjs";
+import { extractTerms, overlap, makePolicy, scoreCandidate, rank, formatReport, runOneLine, CAVEATS } from "./priorart.mjs";
 
 export const MAX_SEARCHES = 6;
 const MAX_DESCRIPTION = 2000;
 const DAY = 86400000;
 
 export const USAGE = `usage: prior-art "<what you plan to build, in a sentence or two>" --gh /abs/path/to/gh [--language L] [--license-ok MIT,Apache-2.0,...] [--max-age-days N] [--min-contributors N] [--limit 1-10] [--json]
+--limit is how many candidates are read in detail (the search itself always fetches at least 10 results).
 Looks for existing open projects on GitHub (read-only, through your own gh) and says whether one is worth contributing to instead. It never opens an issue, comments, forks, stars or contacts anyone.`;
 
 class UsageError extends Error {}
@@ -65,14 +66,19 @@ export function parseArgs(argv) {
  * ghsearch.mjs already builds nothing else; this makes the property independent of that file.
  */
 export function readOnly(run) {
+  const refuse = (why) => { throw new GhError(`refusing: this command only reads (${why})`); };
   return (args, opts) => {
-    if (!Array.isArray(args) || args[0] !== "api") throw new GhError("refusing: not a gh api call");
-    const bad = args.find((a) => typeof a !== "string" || a === "-X" || a === "--method" || a === "-F" || a === "--field" || a === "--input" || a === "--raw-field" || /^-X./.test(a) || /^--method=/.test(a));
-    if (bad !== undefined) throw new GhError("refusing: this command only reads");
-    if (args.some((a) => /\bmutation\b/i.test(a))) throw new GhError("refusing: a mutation");
-    return run(args, opts);
+    if (!Array.isArray(args) || !args.every((a) => typeof a === "string")) refuse("not a list of strings");
+    // An ALLOWLIST of exactly the two shapes ghsearch.mjs builds. gh turns any -f / -F / --field / --input into a POST, and accepts the joined forms
+    // (-fx=1, --field=x=1), so naming the dangerous flags would always miss one. Anything else is refused, including --paginate and --cache.
+    if (args.length === 1 + HEADERS.length + 1 && args[0] === "api" && HEADERS.every((h, i) => args[1 + i] === h) && /^\/[A-Za-z0-9_\/.?&=%:+,~*'()!-]*$/.test(args[args.length - 1])) return run(args, opts);
+    if (args.length === 6 && args[0] === "api" && args[1] === "graphql" && args[2] === "-f" && args[4] === "-f" && /^query=query[({ ]/.test(args[3]) && !/\b(mutation|subscription)\b/i.test(args[3]) && /^q=repo:[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+ is:closed sort:updated-desc$/.test(args[5])) return run(args, opts);
+    return refuse("not one of the two read shapes");
   };
 }
+
+/** Search words joined must stay under GitHub's 256-character query limit (qualifiers excluded); drop trailing words until they fit. */
+export const fitTerms = (terms, max = 250) => { const t = [...terms]; while (t.length > 1 && t.join(" ").length > max) t.pop(); return t; };
 
 const isoSeconds = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
 
@@ -103,7 +109,7 @@ export function runPriorArt(argv, { run, now, maxSearches = MAX_SEARCHES }) {
   const asOf = isoSeconds(now).slice(0, 16) + "Z";
   const since = isoSeconds(now - 365 * DAY);
   const ran = [], seenSets = new Set(), byId = new Map();
-  let partial = null, searchCalls = 0;
+  let partial = null, searchCalls = 0, found = 0;
 
   const doSearch = (set) => {
     const key = [...set].sort().join(" ");
@@ -112,14 +118,15 @@ export function runPriorArt(argv, { run, now, maxSearches = MAX_SEARCHES }) {
     if (++searchCalls > maxSearches) throw new GhError(`more than ${maxSearches} searches; refusing`);
     const r = search.searchRepos({ terms: set, language: args.language, limit: perPage });
     ran.push(r.query);
+    found = Math.max(found, r.total);
     for (const item of r.items) if (!byId.has(item.id)) byId.set(item.id, item);
   };
   const why = (e) => `${clean(e instanceof Error ? e.message : String(e), 200)}${e?.httpStatus === 403 || e?.httpStatus === 429 ? " (probably a rate limit; wait a minute and run it again)" : ""}`;
 
   try {
-    doSearch(terms);
-    if (terms.length > 4) doSearch(terms.slice(0, 4));
-    doSearch(rarest(terms, [...byId.values()]));
+    doSearch(fitTerms(terms));
+    if (terms.length > 4) doSearch(fitTerms(terms.slice(0, 4)));
+    doSearch(fitTerms(rarest(terms, [...byId.values()])));
   } catch (e) {
     if (!(e instanceof GhError)) throw e;
     partial = why(e);
@@ -138,23 +145,27 @@ export function runPriorArt(argv, { run, now, maxSearches = MAX_SEARCHES }) {
   const toRead = order.slice(0, args.limit).map((pre) => readable.find((x) => x.pre === pre));
   let notRead = readable.length - toRead.length;
   const scored = settled.map((s) => s.pre);
+  const unread = order.slice(args.limit).map((pre) => pre.fullName);
+  let nRead = 0;
   for (let i = 0; i < toRead.length; i++) {
     const { repo } = toRead[i];
-    if (partial) { notRead++; continue; }
+    if (partial) { notRead++; unread.push(repo.fullName); continue; }
     try {
       const facts = search.facts(repo, { since, now });
       scored.push(scoreCandidate({ repo, facts, terms, policy: args.policy, now }));
+      nRead++;
     } catch (e) {
       if (!(e instanceof GhError)) throw e;
       partial = `reading ${clean(repo.fullName, 80)}: ${why(e)}`;
       notRead++;
+      unread.push(repo.fullName);
     }
   }
 
   if (args.json) {
-    const out = { asOf, terms, termsDropped, searches: ran, partial, notRead, candidates: rank(scored).map((c) => ({ ...c, runOne: runOneLine(c, args.gh) })) };
+    const out = { asOf, terms, termsDropped, searches: ran, partial, notRead, found, unread, candidates: rank(scored).map((c) => ({ ...c, runOne: runOneLine(c, args.gh) })), caveats: CAVEATS };
     return { code: partial ? 3 : 0, stdout: JSON.stringify(out, null, 2) + "\n", stderr: "" };
   }
-  const text = formatReport({ asOf, searches: ran, candidates: scored, notRead, partial, terms, termsDropped, ghPath: args.gh });
+  const text = formatReport({ asOf, searches: ran, candidates: scored, notRead, partial, terms, termsDropped, ghPath: args.gh, found, unread, nRead });
   return { code: partial ? 3 : 0, stdout: text + "\n", stderr: "" };
 }

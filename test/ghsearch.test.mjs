@@ -107,7 +107,7 @@ test("latestRelease: no release is a real answer (404); a malformed answer or a 
 test("recentContributors: distinct people, bots apart, an unlinked author by email, and no email in the answer", () => {
   const { s } = setup((w) => (w.recentCommits = [commit(1), commit(2), commit(1), commit(3, { id: 99, type: "Bot" }), commit(4, null, "Dev@Example.org"), commit(5, null, "dev@example.org")]));
   const r = s.recentContributors(1001, SINCE);
-  assert.deepEqual(r, { contributors: 3, bots: 1, commits: 6, atLeast: false });
+  assert.deepEqual(r, { contributors: 3, unlinked: 1, bots: 1, commits: 6, atLeast: false });
   assert.ok(!JSON.stringify(r).includes("example.org"));
 });
 test("recentContributors: a full page says 'at least'; a quiet or empty repository is zero, not an error", () => {
@@ -115,8 +115,8 @@ test("recentContributors: a full page says 'at least'; a quiet or empty reposito
   assert.deepEqual([full.contributors, full.commits, full.atLeast], [100, 100, true]);
   const almost = setup((w) => (w.recentCommits = Array.from({ length: 99 }, (_, i) => commit(i + 1)))).s.recentContributors(1001, SINCE);
   assert.equal(almost.atLeast, false);
-  assert.deepEqual(setup().s.recentContributors(1001, SINCE), { contributors: 0, bots: 0, commits: 0, atLeast: false });
-  assert.deepEqual(setup((w) => (w.fail["/commits?"] = 409)).s.recentContributors(1001, SINCE), { contributors: 0, bots: 0, commits: 0, atLeast: false });
+  assert.deepEqual(setup().s.recentContributors(1001, SINCE), { contributors: 0, unlinked: 0, bots: 0, commits: 0, atLeast: false });
+  assert.deepEqual(setup((w) => (w.fail["/commits?"] = 409)).s.recentContributors(1001, SINCE), { contributors: 0, unlinked: 0, bots: 0, commits: 0, atLeast: false });
 });
 test("recentContributors: a bad date never reaches the network; a surprise or an HTTP error refuses", () => {
   const { w, s } = setup();
@@ -276,4 +276,40 @@ test("everything here is a read: no -X, no body, no mutation, GraphQL only as a 
     else assert.ok(/^api -H /.test(c) && /\/(search|repositories)\//.test(c), c);
   }
   assert.equal(w.writes.length, 0);
+});
+
+// ---- findings from the Opus 5.5 and Hermes code reviews (Q6, 2026-10-15) ------------------------------------------------------------------
+
+test("recentContributors: one person under an account and an email counts once; email-only authors are reported apart as 'unlinked'", () => {
+  const same = setup((w) => (w.recentCommits = [commit(7, { id: 7, type: "User" }, "m@x.org"), commit(8, null, "M@x.org")])).s.recentContributors(1001, SINCE);
+  assert.deepEqual([same.contributors, same.unlinked], [1, 0], "the same address on a linked and an unlinked commit is one person");
+  const other = setup((w) => (w.recentCommits = [commit(7, { id: 7, type: "User" }, "m@x.org"), commit(8, null, "other@y.org")])).s.recentContributors(1001, SINCE);
+  assert.deepEqual([other.contributors, other.unlinked], [2, 1]);
+});
+
+test("responseTimes: bot-authored items, the project's own people and items we cannot see the end of are not 'unanswered'", () => {
+  const owner = node("Issue", hoursLater(0), "maint", []); owner.authorAssociation = "OWNER";
+  const member = node("PullRequest", hoursLater(0), "dev", [], []); member.authorAssociation = "MEMBER";
+  const bot = node("PullRequest", hoursLater(0), "dependabot", [], []); bot.author.__typename = "Bot";
+  const buried = node("Issue", hoursLater(0), "alice", [reply(hoursLater(1), "alice"), reply(hoursLater(2), "alice")]); buried.comments.totalCount = 9;
+  const seenAll = node("Issue", hoursLater(0), "alice", [reply(hoursLater(1), "alice")]); seenAll.comments.totalCount = 1;
+  const answered = node("Issue", hoursLater(0), "alice", [reply(hoursLater(4), "maint")]); answered.authorAssociation = "NONE";
+  const r = setup((w) => (w.searchNodes = [owner, member, bot, buried, seenAll, answered])).s.responseTimes("acme/widgets");
+  assert.deepEqual(r, { considered: 2, responded: 1, hours: [4] });
+  const none = setup((w) => (w.searchNodes = [owner, bot])).s.responseTimes("acme/widgets");
+  assert.deepEqual(none, { considered: 0, responded: 0, hours: [] });
+});
+
+test("optin: an empty repository (409) is 'no opt-in file', like a 404", () => {
+  assert.deepEqual(setup((w) => (w.fail["/contents/"] = 409)).s.optin(1001, "main", NOW), { present: false });
+});
+
+test("clean: characters that hide text (Arabic letter mark, tag characters, variation selectors, Hangul fillers, Mongolian separators, combining grapheme joiner) become spaces", () => {
+  for (const cp of [0x61c, 0xe0041, 0xe0042, 0x180e, 0x34f, 0x3164, 0xfe0f, 0x115f, 0xffa0, 0xe0100]) assert.equal(clean(`a${String.fromCodePoint(cp)}b`, 20), "a b", cp.toString(16));
+});
+
+test("responseTimes asks GitHub for the fields the filtering depends on (author association and comment totals)", () => {
+  const { w, s } = setup();
+  s.responseTimes("acme/widgets");
+  assert.ok(w.calls[0].includes("authorAssociation") && w.calls[0].includes("totalCount"), w.calls[0]);
 });

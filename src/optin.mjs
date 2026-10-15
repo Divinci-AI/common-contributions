@@ -105,7 +105,7 @@ export function parseStrictJson(input) {
 // ---- string and glob rules -----------------------------------------------------------------------------------------------------------
 
 /** Letters, numbers, punctuation and the ordinary space only: no controls, bidi controls, zero-width, separators, tabs or newlines. */
-const BAD_RANGES = [[0x00, 0x1f], [0x7f, 0x9f], [0xad, 0xad], [0x200b, 0x200f], [0x2028, 0x202e], [0x2060, 0x206f], [0xfeff, 0xfeff], [0xfff9, 0xfffb], [0xd800, 0xdfff]];
+const BAD_RANGES = [[0x00, 0x1f], [0x7f, 0x9f], [0xad, 0xad], [0x200b, 0x200f], [0x2028, 0x202e], [0x2060, 0x206f], [0xfeff, 0xfeff], [0xfff9, 0xfffb], [0xd800, 0xdfff], [0x34f, 0x34f], [0x61c, 0x61c], [0x115f, 0x1160], [0x17b4, 0x17b5], [0x180b, 0x180e], [0x3164, 0x3164], [0xfe00, 0xfe0f], [0xffa0, 0xffa0], [0xe0000, 0xe007f], [0xe0100, 0xe01ef]];
 export const isPrintable = (s) => typeof s === "string" && s === s.normalize("NFC") && ![...s].some((ch) => { const c = ch.codePointAt(0); return BAD_RANGES.some(([lo, hi]) => c >= lo && c <= hi); });
 /** Hidden or control characters in free text (newline, carriage return and tab are allowed: this is for files and PR text). Returns the code points found. */
 export const hiddenChars = (s) => [...String(s)].filter((ch) => { const c = ch.codePointAt(0); return c !== 9 && c !== 10 && c !== 13 && BAD_RANGES.some(([lo, hi]) => c >= lo && c <= hi); }).map((ch) => "U+" + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, "0"));

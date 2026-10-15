@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, chmodSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, chmodSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runPriorArt, parseArgs, readOnly, rarest, MAX_SEARCHES } from "../src/priorartcmd.mjs";
+import { runPriorArt, parseArgs, readOnly, rarest, fitTerms, MAX_SEARCHES } from "../src/priorartcmd.mjs";
 import { GhError } from "../src/ghclient.mjs";
 import { defaultWorld, fakeRunner } from "./fakegh.mjs";
 
@@ -114,7 +114,7 @@ test("--language and --license-ok reach the search and the verdict", () => {
 test("--json prints the same facts as one JSON document with the numbers and verdicts", () => {
   const r = go(A(["--json"]), build(THREE));
   const j = JSON.parse(r.stdout);
-  assert.deepEqual(Object.keys(j), ["asOf", "terms", "termsDropped", "searches", "partial", "notRead", "candidates"]);
+  assert.deepEqual(Object.keys(j), ["asOf", "terms", "termsDropped", "searches", "partial", "notRead", "found", "unread", "candidates", "caveats"]);
   assert.deepEqual(j.terms, ["streaming", "csv", "parser"]);
   assert.equal(j.partial, null);
   assert.equal(j.candidates[0].fullName, "acme/csvkit");
@@ -163,7 +163,8 @@ test("a later search failing keeps the earlier results and says PARTIAL; a parti
   const empty = build(THREE, { 5001: healthy, 5002: healthy }, (w) => (w.fail["/repositories/"] = 500));
   const r2 = go(A(), empty);
   assert.equal(r2.code, 3);
-  assert.match(r2.stdout, /Nothing decent found among the candidates that were read\./);
+  assert.match(r2.stdout, /No candidate details were read, so nothing could be judged\./);
+  assert.match(r2.stdout, /Found but not read: acme\/csvkit, acme\/tabular/);
   assert.match(r2.stdout, /not read/);
 });
 
@@ -215,17 +216,30 @@ test("text from GitHub is cleaned: no escape sequence, bidi override or zero-wid
 
 // ---- the read-only wrapper -----------------------------------------------------------------------------------------------------------
 
-test("readOnly lets a plain read through and refuses everything else before it runs", () => {
+test("readOnly is an ALLOWLIST: exactly the two read shapes ghsearch builds get through, everything else is refused before it runs", () => {
   const seen = [];
   const run = readOnly((a) => (seen.push(a), { status: 0, stdout: "{}", stderr: "" }));
-  run(["api", "-H", "Accept: x", "/search/repositories?q=csv"]);
-  run(["api", "graphql", "-f", "query=query($q:String!){search(query:$q,type:ISSUE,first:5){nodes{__typename}}}", "-f", "q=repo:a/b is:closed"]);
+  const H = ["-H", "Accept: application/vnd.github+json", "-H", "X-GitHub-Api-Version: 2022-11-28"];
+  run(["api", ...H, "/search/repositories?q=csv%20parser%20in%3Aname&per_page=10"]);
+  run(["api", "graphql", "-f", "query=query($q:String!){search(query:$q,type:ISSUE,first:5){nodes{__typename}}}", "-f", "q=repo:a/b is:closed sort:updated-desc"]);
   assert.equal(seen.length, 2);
-  for (const bad of [["api", "-X", "POST", "/x"], ["api", "-XDELETE", "/x"], ["api", "--method", "PUT", "/x"], ["api", "--method=PATCH", "/x"], ["api", "-F", "a=b", "/x"], ["api", "--field", "a=b", "/x"], ["api", "--raw-field", "a=b", "/x"], ["api", "--input", "f", "/x"],
-    ["api", "graphql", "-f", "query=mutation { addStar(input:{starrableId:\"x\"}) { clientMutationId } }"], ["repo", "fork", "a/b"], ["issue", "create"], [], "api", ["api", 5]]) {
-    assert.throws(() => run(bad), GhError, JSON.stringify(bad));
-  }
+  const q = "query=query($q:String!){search(query:$q,type:ISSUE,first:5){nodes{__typename}}}", gq = "q=repo:a/b is:closed sort:updated-desc";
+  const bad = [
+    ["api", "-X", "POST", "/x"], ["api", "-XDELETE", "/x"], ["api", "--method", "PUT", "/x"], ["api", "--method=PATCH", "/x"], ["repo", "fork", "a/b"], ["issue", "create"], [], "api", ["api", 5],
+    ["api", ...H, "/repos/o/r/issues", "-f", "title=x"], ["api", "/repos/o/r/issues", "-f", "title=x", "-f", "body=y"], ["api", "-ftitle=x", "/x"], ["api", "--raw-field=title=x", "/x"], ["api", "-Ffoo=bar", "/x"],
+    ["api", "--field=x=1", "/x"], ["api", "--input=f", "/x"], ["api", "--input", "f", ...H, "/x"], ["api", ...H, "/x", "--paginate"], ["api", ...H, "/x", "--cache", "1h"], ["api", "--paginate", ...H, "/x"],
+    ["api", ...H, "https://evil.example/x"], ["api", ...H, "/x y"], ["api", ...H, "x"], ["api", "-H", "Accept: x", "-H", "Y: z", "/x"], ["api", ...H],
+    ["api", "graphql", "-f", "query=mutation { addStar(input:{starrableId:\"x\"}) { clientMutationId } }", "-f", gq], ["api", "graphql", "-f", q, "-f", gq, "-f", "extra=1"], ["api", "graphql", "-f", q, "-F", gq],
+    ["api", "graphql", "-f", "query=query { viewer { login } } mutation { x }", "-f", gq], ["api", "graphql", "-f", q, "-f", "q=org:evil is:closed"], ["api", "graphql", "-f", q, "-f", "q=repo:a/b is:closed sort:updated-desc is:private"],
+  ];
+  for (const b of bad) assert.throws(() => run(b), GhError, JSON.stringify(b));
   assert.equal(seen.length, 2, "a refused call never reached the runner");
+});
+
+test("runPriorArt really wraps the runner in readOnly (the wiring cannot be seen from outside, so it is pinned in the source)", () => {
+  const src = readFileSync(fileURLToPath(new URL("../src/priorartcmd.mjs", import.meta.url)), "utf8");
+  assert.match(src, /createSearch\(readOnly\(run\)\)/);
+  assert.equal((src.match(/createSearch\(/g) ?? []).length, 1);
 });
 
 test("rarest: the terms with the fewest hits among the candidates seen; ties go to the longer word, then to order", () => {
@@ -314,10 +328,51 @@ test("a project with a valid opt-in file gets the exact run-one line (printed, n
   const r = go(A(), b);
   assert.equal(r.code, 0, r.stderr);
   const lines = r.stdout.split("\n").filter((l) => l.includes("run-one"));
-  assert.deepEqual(lines, [`   node src/cli.mjs run-one <issues.json> <issue-number> --repo <your-clone-of-csvkit> --model <ollama-model> --github acme/csvkit --gh ${GH}`]);
+  assert.deepEqual(lines, [`   node src/cli.mjs run-one ISSUES_JSON ISSUE_NUMBER --repo YOUR_CLONE_OF_CSVKIT --model OLLAMA_MODEL --github acme/csvkit --gh ${GH}`]);
   assert.match(r.stdout, /opted in to Common AI: yes \(interval 48 hours, contact @maintainer/);
   assert.match(r.stdout, /PAUSED: do not send AI contributions here/);
   assert.deepEqual(b.w.writes, []);
   const j = JSON.parse(go(A(["--json"]), build(items, data)).stdout);
   assert.deepEqual(j.candidates.map((c) => [c.fullName, c.runOne !== null]), [["acme/csvkit", true], ["acme/csvpaused", false], ["acme/csvplain", false]]);
+});
+
+// ---- findings from the Opus 5.5 and Hermes code reviews (Q6, 2026-10-15) ------------------------------------------------------------------
+
+test("the run-one line uses plain CAPITAL words, never <brackets> (a shell reads those as redirections), and is printed exactly or not at all", () => {
+  const items = [item(5001, "acme/csvkit", "Fast streaming CSV parser")];
+  const b = build(items, { 5001: { ...healthy, tree: optedTree, optin: { content: JSON.stringify(goodOptin()) } } });
+  const out = go(["streaming csv parser", "--gh", "/opt/my  tools/gh"], b).stdout;
+  assert.ok(!out.includes("run-one"), "a gh path that clean() would alter (two spaces) gives no line rather than an altered one");
+  const ok = go(A(), build(items, { 5001: { ...healthy, tree: optedTree, optin: { content: JSON.stringify(goodOptin()) } } })).stdout;
+  assert.ok(ok.includes("run-one") && !/[<>]/.test(ok.split("\n").filter((l) => l.includes("run-one") || l.includes("to start")).join("\n")));
+});
+
+test("the report shows how many repositories GitHub matched and names the candidates it found but did not read", () => {
+  const many = Array.from({ length: 6 }, (_, i) => item(6000 + i, `acme/csv${i}`, "Streaming CSV parser"));
+  const b = build(many, {}, (w) => (w.repoSearch.total_count = 431));
+  const r = go(A(["--limit", "2"]), b);
+  assert.match(r.stdout, /the broadest search matched 431 repositories on GitHub; only the top results of each search were looked at/);
+  assert.match(r.stdout, /Found but not read: acme\/csv\d(, acme\/csv\d){3}$/m);
+  assert.equal(JSON.parse(go(A(["--limit", "2", "--json"]), build(many, {}, (w) => (w.repoSearch.total_count = 431))).stdout).found, 431);
+});
+
+test("--json carries both standing caveats, like the text report", () => {
+  const j = JSON.parse(go(A(["--json"]), build(THREE)).stdout);
+  assert.equal(j.caveats.length, 2);
+  assert.match(j.caveats.join(" "), /does not prove nothing better exists/); assert.match(j.caveats.join(" "), /not a promise the project wants it/);
+});
+
+test("a very long description cannot make a search the 256-character limit would refuse: trailing words are dropped to fit", () => {
+  const words = Array.from({ length: 8 }, (_, i) => String.fromCharCode(97 + i).repeat(40));
+  assert.ok(fitTerms(words).join(" ").length <= 250); assert.equal(fitTerms(words).length, 6);
+  assert.deepEqual(fitTerms(["csv", "parser"]), ["csv", "parser"]);
+  assert.deepEqual(fitTerms(["x".repeat(300)]).length, 1, "a single word is never emptied");
+  const b = build(THREE);
+  go([words.join(" "), "--gh", GH], b);
+  assert.ok(b.w.calls.filter((c) => c.includes("/search/repositories")).every((c) => decodeURIComponent(c.split("q=")[1].split("&")[0]).split(" in:")[0].length <= 250));
+});
+
+test("a fork that slips through the search is skipped, not recommended", () => {
+  const r = go(A(), build([item(5001, "acme/csvkit", "Fast streaming CSV parser", { fork: true })]));
+  assert.match(r.stdout, /Skipped \(1\): acme\/csvkit \(a fork/);
 });

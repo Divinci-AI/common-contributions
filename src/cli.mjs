@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 /**
+ *   node src/cli.mjs prior-art "<what you plan to build>" --gh /abs/gh [--language L] [--license-ok A,B] [--max-age-days N] [--min-contributors N] [--limit N] [--json]
+ *       read-only look for existing projects (touches no state; exit 0 complete, 3 partial, 1 could not search, 2 bad arguments)
  *   node src/cli.mjs status            spend and STOP state
  *   node src/cli.mjs stop "reason"     trip the kill switch
  *   node src/cli.mjs clear-stop --yes  a human clears it
@@ -65,6 +67,18 @@ const originOf = (repo) => {
   const m = r.stdout.trim().match(/^(?:https?:\/\/(?:[^@\/]*@)?|git@|ssh:\/\/git@)([^\/:]+)[\/:]([^\/]+\/[^\/]+?)(?:\.git)?\/?$/);
   return m ? `${m[1]}/${m[2]}` : null;
 };
+
+// prior-art touches no state: dispatch it BEFORE the state directory, kill switch and budget below are created (KillSwitch's constructor makes the directory).
+if (process.argv[2] === "prior-art") {
+  const { runPriorArt } = await import("./priorartcmd.mjs");
+  const argv = process.argv.slice(3), gi = argv.indexOf("--gh");
+  let run;
+  try { run = ghRunner(gi !== -1 ? argv[gi + 1] : ""); } catch { run = () => { throw new Error("gh must be an absolute path"); }; }
+  const r = runPriorArt(argv, { run, now: Date.now() });
+  if (r.stdout) process.stdout.write(r.stdout);
+  if (r.stderr) process.stderr.write(r.stderr);
+  process.exit(r.code);
+}
 
 const stateDir = defaultStateDir();
 const kill = new KillSwitch({ stateDir });
@@ -428,6 +442,6 @@ if (cmd === "status") {
   try { out = runMutations({ root, sourcePath: source, mutations: JSON.parse(readFileSync(file, "utf8")), runTest }); } finally { if (copy) rmTree(copy, { recursive: true, force: true }); }
   console.warn(JSON.stringify(out, null, 2));
 } else {
-  console.error("usage: status | stop [reason] | clear-stop --yes | dry-run <issues.json> | run-one ... | build-deps ... | pin-requirements ... | pin-runtime ... | verify-record ... | optin-check ... | publish ... | cleanup ... | coverage ... | mutate ...");
+  console.error("usage: prior-art ... | status | stop [reason] | clear-stop --yes | dry-run <issues.json> | run-one ... | build-deps ... | pin-requirements ... | pin-runtime ... | verify-record ... | optin-check ... | publish ... | cleanup ... | coverage ... | mutate ...");
   process.exit(2);
 }

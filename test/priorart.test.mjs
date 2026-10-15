@@ -70,24 +70,38 @@ test("contributors: the minimum passes, one below fails; a lower bound that fall
   const bound = score(repo(), c(1, true)); assert.equal(bound.verdict, "close"); assert.deepEqual(bound.failures, []); assert.match(bound.unknowns.join(), /lower bound/);
   assert.equal(verdict(repo(), c(100, true)), "contribute", "a lower bound that already passes passes");
 });
-test("response: median and answer rate; fewer than 5 answered is unknown and does not block, a measured bad one does", () => {
+test("response: the answer RATE needs 5 closed items, the MEDIAN needs 5 answered ones; a measured bad one is a failure, nothing measured is unknown and does not block", () => {
   const r = (responded, h, considered = 20) => facts({ response: { considered, responded, hours: hours(responded, h) } });
   assert.equal(verdict(repo(), r(12, 336)), "contribute");
   assert.equal(verdict(repo(), r(12, 337)), "close");
   assert.equal(verdict(repo(), r(10, 10)), "contribute", "10 of 20 is exactly the minimum rate");
   assert.equal(verdict(repo(), r(9, 10)), "close", "9 of 20 is below it");
-  const few = score(repo(), r(4, 10)); assert.equal(few.verdict, "contribute"); assert.match(few.unknowns.join(), /fewer than 5 answered/);
-  const none = score(repo(), facts({ response: { considered: 20, responded: 0, hours: [] } })); assert.equal(none.verdict, "contribute");
+  for (const n of [0, 4]) { const bad = score(repo(), r(n, 10)); assert.equal(bad.verdict, "close", `${n} of 20 answered is a measured failure, not an unknown`); assert.match(bad.failures.join(), /slow or missing replies \(\d of 20 answered\)/); assert.deepEqual(bad.unknowns, []); }
   assert.equal(verdict(repo(), r(5, 10, 20)), "close", "5 answered of 20 is a 25% rate");
+  const few = score(repo(), r(3, 10, 4)); assert.equal(few.verdict, "contribute", "4 closed items is too few to measure anything"); assert.match(few.unknowns.join(), /fewer than 5 closed items/);
   assert.equal(verdict(repo(), facts({ response: { considered: 0, responded: 0, hours: [] } })), "contribute");
   const med = score(repo(), facts({ response: { considered: 6, responded: 6, hours: [1, 1, 1, 1000, 1000, 1000] } }));
   assert.equal(med.numbers.response.medianHours, 500.5);
+  assert.equal(med.verdict, "close"); assert.match(med.failures.join(), /median 21d/);
 });
-test("soft failures: one is a close; two with a good match is a skip; two with a partial match is still close", () => {
+test("soft failures: one is a close; more than the limit is a skip at EVERY match level (a better match never gives a worse verdict)", () => {
   const twoBad = facts({ contributors: { contributors: 1, bots: 0, commits: 1, atLeast: false } });
   assert.equal(verdict(repo({ pushedAt: ago(400) }), twoBad), "skip");
-  assert.equal(verdict(repo({ pushedAt: ago(400), description: "csv" }), twoBad), "close");
+  assert.equal(verdict(repo({ pushedAt: ago(400), description: "csv" }), twoBad), "skip", "a partial match with two failures is not better off than a strong one");
   assert.equal(verdict(repo({ pushedAt: ago(400) }), twoBad, makePolicy({ maxSoftFailures: 2 })), "close");
+  const rank3 = { contribute: 0, close: 1, skip: 2, "no-match": 3 };
+  const levels = ["unrelated", "csv", "csv parser", "csv parser streaming", "csv parser streaming rust"]; // 0, 25, 50, 75, 100 %
+  const healths = [facts(), facts({ contributors: { contributors: 1, bots: 0, commits: 1, atLeast: false } }), twoBad, facts({ contributors: null })];
+  for (const f of healths) for (const age of [10, 400]) {
+    const seq = levels.map((d) => rank3[verdict(repo({ description: d, pushedAt: ago(age) }), f)]);
+    for (let i = 1; i < seq.length; i++) assert.ok(seq[i] <= seq[i - 1] || seq[i - 1] === 3, `monotone: ${JSON.stringify(seq)}`);
+  }
+});
+test("a stale project has no recent commits either: that is one failure, not two", () => {
+  const silent = facts({ contributors: { contributors: 0, bots: 0, commits: 0, atLeast: false } });
+  const s = score(repo({ pushedAt: ago(400) }), silent);
+  assert.equal(s.failures.length, 1); assert.match(s.failures[0], /last push 400 days ago.*and no commits in the last year/); assert.equal(s.verdict, "close");
+  const quiet = score(repo({ pushedAt: ago(10) }), silent); assert.match(quiet.failures.join(), /0 contributors/); assert.equal(quiet.failures.length, 1);
 });
 test("hard skips: archived, a license outside the list, and very old, whatever the match", () => {
   assert.equal(verdict(repo({ archived: true })), "skip");
@@ -148,18 +162,18 @@ test("pure: the same input gives the same output, and inputs may be frozen", () 
 // ---- the report -----------------------------------------------------------------------------------------------------------------------
 
 test("formatCandidate: the numbers line comes before the verdict line, and a missing number reads 'unknown'", () => {
-  const text = formatCandidate(score(repo({ description: "csv parser" }), facts({ response: { considered: 20, responded: 3, hours: [1, 2, 3] }, tests: null, treeTruncated: true })), 1);
+  const text = formatCandidate(score(repo({ description: "csv parser" }), facts({ response: { considered: 3, responded: 3, hours: [1, 2, 3] }, tests: null, treeTruncated: true })), 1);
   const lines = text.split("\n");
   assert.match(lines[0], /^1\. acme\/csvkit {2}https:\/\/github\.com\/acme\/csvkit$/);
-  assert.match(lines[1], /^ {3}numbers: MIT · pushed 2026-10-03 \(10d ago\) · 5 contributors\/yr · first reply median 2h \(3 of 20 answered\) · release none on GitHub · CI yes · tests unknown · overlap 50% \(csv, parser of 4 terms\)$/);
+  assert.match(lines[1], /^ {3}numbers: MIT · pushed 2026-10-03 \(10d ago\) · 5 commit authors in the last year · first non-author reply median 2h \(3 of 3 answered\) · release none on GitHub · CI yes · tests unknown · overlap 50% \(csv, parser of 4 terms\)$/);
   assert.match(lines[2], /^ {3}verdict: contribute$/);
   assert.ok(lines.findIndex((l) => l.includes("numbers:")) < lines.findIndex((l) => l.includes("verdict:")));
-  assert.match(lines[3], /unknown: first response time \(fewer than 5 answered\)/);
+  assert.match(lines[3], /unknown: first response time \(fewer than 5 closed items seen\)/);
   assert.match(text, /opted in to Common AI: no \(no opt-in file/);
 });
 test("formatCandidate: failures are printed with their numbers; a lower bound shows a plus sign; no license says so", () => {
   const text = formatCandidate(score(repo({ license: null, pushedAt: ago(400) }), facts({ contributors: { contributors: 100, bots: 0, commits: 100, atLeast: true } })), 2);
-  assert.match(text, /no license detected · pushed 2025-09-08 \(400d ago\) · 100\+ contributors\/yr/);
+  assert.match(text, /no license detected · pushed 2025-09-08 \(400d ago\) · 100\+ commit authors in the last year/);
   assert.match(text, /verdict: close — last push 400 days ago \(limit 365\)/);
   assert.match(text, /unknown: license \(none detected\)/);
 });
@@ -182,4 +196,67 @@ test("formatReport: header, partial label, nothing-found line, honesty lines and
 test("formatReport never lists a skip or a no-match as a recommendation", () => {
   const out = formatReport({ asOf: "t", searches: ["q"], candidates: [score(repo({ archived: true })), score(repo({ description: "unrelated", fullName: "n/m", url: "https://github.com/n/m" }))] });
   assert.ok(!/^\d+\. /m.test(out)); assert.match(out, /Nothing decent found\./);
+});
+
+// ---- findings from the Opus 5.5 review of Q3 (2026-10-15) ---------------------------------------------------------------------------
+
+test("a license list is compared without regard to case (SPDX ids are not case-sensitive); the CLI form --license-ok mit works", () => {
+  assert.equal(verdict(repo({ license: "MIT" }), facts(), makePolicy({ licenseOk: ["mit"] })), "contribute");
+  assert.equal(verdict(repo({ license: "Apache-2.0" }), facts(), makePolicy({ licenseOk: ["APACHE-2.0"] })), "contribute");
+  assert.equal(verdict(repo({ license: "GPL-3.0" }), facts(), makePolicy({ licenseOk: ["mit"] })), "skip");
+});
+test("a missing push date ranks last, never first", () => {
+  const mk = (name, pushedAt) => score(repo({ fullName: name, url: `https://github.com/${name}`, pushedAt }), facts({ contributors: null }));
+  const ranked = rank([mk("a/nulldate", null), mk("b/old", ago(300)), mk("c/new", ago(1))]).map((c) => c.fullName);
+  assert.deepEqual(ranked, ["c/new", "b/old", "a/nulldate"]);
+});
+test("a push date in the future is unknown (not 'very fresh'), apart from a day of clock skew", () => {
+  const future = score(repo({ pushedAt: new Date(NOW + 200 * DAY).toISOString().replace(".000Z", "Z") }));
+  assert.equal(future.numbers.ageDays, null); assert.notEqual(future.verdict, "contribute"); assert.match(future.unknowns.join(), /last push date/);
+  const skew = score(repo({ pushedAt: new Date(NOW + 0.5 * DAY).toISOString().replace(".000Z", "Z") }));
+  assert.equal(skew.numbers.ageDays, 0); assert.equal(skew.verdict, "contribute");
+});
+test("a zero overlap threshold is refused (it would recommend every project)", () => {
+  assert.throws(() => makePolicy({ contributeOverlap: 0, closeOverlap: 0 }), /contributeOverlap/);
+  assert.throws(() => makePolicy({ closeOverlap: 0 }), /closeOverlap/);
+  assert.equal(makePolicy({ contributeOverlap: 0.01, closeOverlap: 0.01 }).contributeOverlap, 0.01);
+});
+test("malformed numbers are unknown, never scored: NaN, negative, fractional, text, or more answered than considered", () => {
+  const badC = [{ contributors: NaN, atLeast: false }, { contributors: -3, atLeast: false }, { contributors: 2.5, atLeast: false }, { contributors: "5", atLeast: false }, { contributors: 5 }, {}, 7];
+  for (const contributors of badC) { const s = score(repo(), facts({ contributors })); assert.notEqual(s.verdict, "contribute", JSON.stringify(contributors)); assert.deepEqual(s.failures, [], JSON.stringify(contributors)); assert.equal(s.numbers.contributors, null); assert.match(s.unknowns.join(), /contributors/); }
+  const badR = [{ considered: 20, responded: 25, hours: hours(25, 1) }, { considered: 20, responded: 6, hours: hours(5, 1) }, { considered: 20, responded: 6, hours: hours(6, -5) }, { considered: 20, responded: 6, hours: hours(6, NaN) }, { considered: -1, responded: 0, hours: [] }, { considered: "20", responded: 6, hours: hours(6, 1) }];
+  for (const response of badR) { const s = score(repo(), facts({ response })); assert.deepEqual(s.failures, [], JSON.stringify(response)); assert.equal(s.numbers.response, null); assert.match(s.unknowns.join(), /first response time/); }
+});
+test("a missing repo or name throws a clear error; an archived flag that is not a boolean is unknown and blocks contribute", () => {
+  for (const bad of [null, undefined, "x", {}, { fullName: 5 }]) assert.throws(() => scoreCandidate({ repo: bad, facts: null, terms: TERMS, now: NOW }), /needs a repo with a fullName/);
+  const s = score(repo({ archived: undefined })); assert.notEqual(s.verdict, "contribute"); assert.match(s.unknowns.join(), /archived status/); assert.deepEqual(s.failures, []);
+  assert.equal(verdict(repo({ archived: "yes" })), "close");
+});
+test("a paused opt-in prints a note beside the verdict, so 'contribute' is not read as an invitation", () => {
+  const s = score(repo(), facts({ optin: { present: true, valid: true, paused: true, intervalHours: 24, contact: "@m", reviewBy: "2027-01-01" } }));
+  assert.equal(s.verdict, "contribute"); assert.match(s.notes.join(), /rates the project.*PAUSED.*do not send AI contributions/);
+  assert.match(formatCandidate(s, 1), /note: .*PAUSED/);
+});
+test("overlap: the owner's name is not part of the match; tokenising is the same on both sides ('oauth2' is found by 'oauth')", () => {
+  assert.equal(overlap(["rust", "parser"], { fullName: "rust-lang/book", description: "a book", topics: [] }).fraction, 0, "the organisation is not the project");
+  assert.deepEqual(overlap(["rust"], { fullName: "acme/rust-book", description: "", topics: [] }).matched, ["rust"]);
+  assert.deepEqual(overlap(["oauth"], { fullName: "acme/x", description: "OAuth2 client", topics: [] }).matched, ["oauth"]);
+});
+test("the report names the words it matched on, says when words were dropped or there are very few, and never calls an unread release 'none'", () => {
+  const sc = [score(repo())];
+  const r = formatReport({ asOf: "t", searches: ["q"], candidates: sc, terms: ["csv", "parser"], termsDropped: 3 });
+  assert.match(r, /matched on: csv, parser \(3 more words in your description were not used\); only 2 searchable words, so matches are broad/);
+  assert.match(formatReport({ asOf: "t", searches: ["q"], candidates: sc, terms: ["csv", "parser", "rust"] }), /^matched on: csv, parser, rust$/m);
+  const unread = formatCandidate(score(repo(), null), 1);
+  assert.match(unread, /release unknown \(not read\)/); assert.ok(!unread.includes("none on GitHub"));
+});
+
+test("wording: singular and plural, nothing to measure, and a skipped project shows every reason it failed", () => {
+  const one = formatCandidate(score(repo(), facts({ contributors: { contributors: 1, bots: 0, commits: 1, atLeast: false }, response: { considered: 1, responded: 0, hours: [] } })), 1);
+  assert.match(one, /1 commit author in the last year/); assert.match(one, /no replies seen in 1 closed item ·/);
+  assert.match(formatCandidate(score(repo(), facts({ response: { considered: 0, responded: 0, hours: [] } })), 1), /no closed issues or PRs to measure/);
+  assert.match(formatCandidate(score(repo(), facts({ contributors: { contributors: 100, bots: 0, commits: 100, atLeast: true } })), 1), /100\+ commit authors in the last year/);
+  const two = score(repo({ pushedAt: ago(400) }), facts({ contributors: { contributors: 1, bots: 0, commits: 1, atLeast: false } }));
+  assert.equal(two.verdict, "skip");
+  assert.match(formatReport({ asOf: "t", searches: ["q"], candidates: [two] }), /Skipped \(1\): acme\/csvkit \(last push 400 days ago \(limit 365\); 1 contributor in the last year \(minimum 2\)\)/);
 });

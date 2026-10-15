@@ -299,3 +299,25 @@ test("a GitHub error's text is cleaned before it is shown; a bug (not a GitHub e
   assert.ok(!/[\u001b\u202e]/.test(r.stderr), JSON.stringify(r.stderr));
   assert.throws(() => runPriorArt(A(), { run: () => { throw new TypeError("boom"); }, now: NOW }), TypeError);
 });
+
+// ---- Q5, end to end -----------------------------------------------------------------------------------------------------------------
+
+const inDays = (n) => new Date(Date.parse(NOW_ISO) + n * 86400000).toISOString().slice(0, 10);
+const NOW_ISO = "2026-10-13T08:00:00Z";
+const goodOptin = (over = {}) => ({ version: 1, opt_in: true, contact: "@maintainer", policy_url: "https://example.org/contributing/ai", review_by: inDays(100), label_applied_by: ["maintainer"], disclosure: { mechanism: "pr_body", text: "AI assistance: yes (tool: Common Contributions)" }, certification: { dco: "none", cla: "none" }, min_hours_between_prs: 48, ...over });
+const optedTree = { truncated: false, tree: [{ path: "test", type: "tree" }, { path: ".github/workflows/ci.yml", type: "blob" }, { path: ".github/agent-contributions.json", type: "blob" }] };
+
+test("a project with a valid opt-in file gets the exact run-one line (printed, never run); a paused one and one without do not", () => {
+  const items = [item(5001, "acme/csvkit", "Fast streaming CSV parser"), item(5002, "acme/csvpaused", "Streaming CSV parser", { pushed_at: "2026-09-29T10:00:00Z" }), item(5003, "acme/csvplain", "Streaming CSV parser", { pushed_at: "2026-09-28T10:00:00Z" })];
+  const data = { 5001: { ...healthy, tree: optedTree, optin: { content: JSON.stringify(goodOptin()) } }, 5002: { ...healthy, tree: optedTree, optin: { content: JSON.stringify(goodOptin({ paused: true })) } }, 5003: healthy };
+  const b = build(items, data);
+  const r = go(A(), b);
+  assert.equal(r.code, 0, r.stderr);
+  const lines = r.stdout.split("\n").filter((l) => l.includes("run-one"));
+  assert.deepEqual(lines, [`   node src/cli.mjs run-one <issues.json> <issue-number> --repo <your-clone-of-csvkit> --model <ollama-model> --github acme/csvkit --gh ${GH}`]);
+  assert.match(r.stdout, /opted in to Common AI: yes \(interval 48 hours, contact @maintainer/);
+  assert.match(r.stdout, /PAUSED: do not send AI contributions here/);
+  assert.deepEqual(b.w.writes, []);
+  const j = JSON.parse(go(A(["--json"]), build(items, data)).stdout);
+  assert.deepEqual(j.candidates.map((c) => [c.fullName, c.runOne !== null]), [["acme/csvkit", true], ["acme/csvpaused", false], ["acme/csvplain", false]]);
+});

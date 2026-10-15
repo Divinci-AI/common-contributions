@@ -8,7 +8,7 @@
  */
 import { createSearch, clean, LIMITS } from "./ghsearch.mjs";
 import { GhError } from "./ghclient.mjs";
-import { extractTerms, overlap, makePolicy, scoreCandidate, rank, formatReport } from "./priorart.mjs";
+import { extractTerms, overlap, makePolicy, scoreCandidate, rank, formatReport, runOneLine } from "./priorart.mjs";
 
 export const MAX_SEARCHES = 6;
 const MAX_DESCRIPTION = 2000;
@@ -152,9 +152,9 @@ export function runPriorArt(argv, { run, now, maxSearches = MAX_SEARCHES }) {
   }
 
   if (args.json) {
-    const out = { asOf, terms, termsDropped, searches: ran, partial, notRead, candidates: rank(scored) };
+    const out = { asOf, terms, termsDropped, searches: ran, partial, notRead, candidates: rank(scored).map((c) => ({ ...c, runOne: runOneLine(c, args.gh) })) };
     return { code: partial ? 3 : 0, stdout: JSON.stringify(out, null, 2) + "\n", stderr: "" };
   }
-  const text = formatReport({ asOf, searches: ran, candidates: scored, notRead, partial, terms, termsDropped });
+  const text = formatReport({ asOf, searches: ran, candidates: scored, notRead, partial, terms, termsDropped, ghPath: args.gh });
   return { code: partial ? 3 : 0, stdout: text + "\n", stderr: "" };
 }

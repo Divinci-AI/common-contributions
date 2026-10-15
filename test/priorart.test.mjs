@@ -260,3 +260,29 @@ test("wording: singular and plural, nothing to measure, and a skipped project sh
   assert.equal(two.verdict, "skip");
   assert.match(formatReport({ asOf: "t", searches: ["q"], candidates: [two] }), /Skipped \(1\): acme\/csvkit \(last push 400 days ago \(limit 365\); 1 contributor in the last year \(minimum 2\)\)/);
 });
+
+// ---- Q5: the line to start work, printed and never run ------------------------------------------------------------------------------
+
+import { runOneLine } from "../src/priorart.mjs";
+const OPTED = { present: true, valid: true, paused: false, intervalHours: 48, contact: "@maintainer", reviewBy: "2027-01-01" };
+test("runOneLine: only for contribute or close with a valid, unpaused opt-in; exact flags; the person's own parts are placeholders", () => {
+  const yes = score(repo(), facts({ optin: OPTED }));
+  assert.equal(runOneLine(yes, "/opt/homebrew/bin/gh"), "node src/cli.mjs run-one <issues.json> <issue-number> --repo <your-clone-of-csvkit> --model <ollama-model> --github acme/csvkit --gh /opt/homebrew/bin/gh");
+  assert.match(formatCandidate(yes, 1, { ghPath: "/opt/homebrew/bin/gh" }), /to start \(nothing is run for you.*\n {3}node src\/cli\.mjs run-one .* --github acme\/csvkit --gh \/opt\/homebrew\/bin\/gh/);
+  const close = score(repo({ description: "csv" }), facts({ optin: OPTED }));
+  assert.equal(close.verdict, "close"); assert.ok(runOneLine(close, "/usr/bin/gh"));
+  for (const optin of [{ present: false }, { present: true, valid: false, errors: ["expired"] }, { ...OPTED, paused: true }, undefined]) assert.equal(runOneLine(score(repo(), facts({ optin })), "/usr/bin/gh"), null, JSON.stringify(optin));
+  assert.equal(runOneLine(score(repo(), null), "/usr/bin/gh"), null, "an unread candidate has no opt-in status");
+  assert.equal(runOneLine(score(repo({ archived: true }), facts({ optin: OPTED })), "/usr/bin/gh"), null, "a skipped project never gets a line");
+  assert.equal(runOneLine(score(repo({ description: "unrelated" }), facts({ optin: OPTED })), "/usr/bin/gh"), null);
+  assert.equal(formatCandidate(yes, 1), formatCandidate(yes, 1, { ghPath: null }), "no gh path, no line");
+  assert.ok(!formatCandidate(yes, 1).includes("run-one"));
+});
+test("runOneLine: names and the gh path are checked and quoted, so nothing in them can add a command", () => {
+  const yes = (fullName) => ({ ...score(repo(), facts({ optin: OPTED })), fullName });
+  for (const bad of ["acme/x; rm -rf ~", "acme/x y", "acme/../x", "../x", "a/b/c", "acme/$(id)", "acme/x\n", "acme/x`id`"]) assert.equal(runOneLine(yes(bad), "/usr/bin/gh"), null, bad);
+  for (const bad of ["gh", "", null, "/usr/bin/gh\n--x", "/usr/bin/gh\u001b[2J"]) assert.equal(runOneLine(yes("acme/x"), bad), null, JSON.stringify(bad));
+  assert.match(runOneLine(yes("acme/x"), "/Users/me/my tools/gh"), /--gh '\/Users\/me\/my tools\/gh'$/);
+  assert.match(runOneLine(yes("acme/x"), "/Users/o'brien/gh"), /--gh '\/Users\/o'\\''brien\/gh'$/);
+  assert.match(runOneLine(yes("acme/x"), "/a/$(id)/gh"), /--gh '\/a\/\$\(id\)\/gh'$/);
+});

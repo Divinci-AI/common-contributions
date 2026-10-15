@@ -157,8 +157,22 @@ const yn = (v) => (v === null || v === undefined ? "unknown" : v ? "yes" : "no")
 const pct = (f) => `${Math.round(f * 100)}%`;
 const day = (iso) => (typeof iso === "string" ? iso.slice(0, 10) : "unknown");
 
+const SLUG = /^[A-Za-z0-9._-]{1,100}\/[A-Za-z0-9._-]{1,100}$/;
+const shellWord = (w) => (/^[A-Za-z0-9_\/.@+:-]+$/.test(w) ? w : `'${w.replace(/'/g, `'\\''`)}'`);
+/**
+ * The command a person could run to start work on a project that has a valid, unpaused opt-in file, or null. NOTHING is run by prior-art.
+ * The angle-bracket parts are the person's own (their issues file, the issue, their clone, their model): a shell refuses them if pasted unedited.
+ * Only for contribute and close; a skipped or unrelated project never gets a line. `ghPath` is the absolute gh the person gave.
+ */
+export function runOneLine(c, ghPath) {
+  if (!c || (c.verdict !== "contribute" && c.verdict !== "close") || c.optin?.status !== "yes") return null;
+  if (typeof c.fullName !== "string" || !SLUG.test(c.fullName) || c.fullName.split("/").some((x) => x === "." || x === "..")) return null;
+  if (typeof ghPath !== "string" || !ghPath.startsWith("/") || /[\u0000-\u001f\u007f]/.test(ghPath)) return null;
+  return `node src/cli.mjs run-one <issues.json> <issue-number> --repo <your-clone-of-${c.fullName.split("/")[1]}> --model <ollama-model> --github ${c.fullName} --gh ${shellWord(ghPath)}`;
+}
+
 /** Numbers first, then the verdict. Every string is cleaned again here, so a caller that forgot cannot print an escape sequence. */
-export function formatCandidate(c, i) {
+export function formatCandidate(c, i, { ghPath = null } = {}) {
   const n = c.numbers;
   const contributors = n.contributors ? `${n.contributors.count}${n.contributors.atLeast ? "+" : ""} commit author${n.contributors.count === 1 && !n.contributors.atLeast ? "" : "s"} in the last year` : "commit authors unknown";
   const response = n.response && n.response.responded > 0 ? `first non-author reply median ${fmtHours(n.response.medianHours)} (${n.response.responded} of ${n.response.considered} answered)` : n.response && n.response.considered === 0 ? "no closed issues or PRs to measure" : n.response ? `no replies seen in ${n.response.considered} closed item${n.response.considered === 1 ? "" : "s"}` : "first reply unknown";
@@ -170,6 +184,8 @@ export function formatCandidate(c, i) {
   if (c.unknowns.length) lines.push(`   unknown: ${c.unknowns.map((x) => clean(x, 80)).join("; ")}`);
   if (c.notes.length) lines.push(`   note: ${c.notes.map((x) => clean(x, 120)).join("; ")}`);
   lines.push(`   ${clean(c.optin.text, 400)}`);
+  const start = runOneLine(c, ghPath);
+  if (start) lines.push("   to start (nothing is run for you; pick an issue the maintainer labelled for agents, and keep to their interval):", `   ${clean(start, 400)}`);
   if (c.description) lines.push(`   "${clean(c.description, 160)}"`);
   return lines.join("\n");
 }
@@ -178,14 +194,14 @@ export function formatCandidate(c, i) {
  * The whole report. `searches` are the query strings that ran; `notRead` candidates were found but their details were not read;
  * `partial` carries the reason a run stopped early (a rate limit, an HTTP error). Only contribute / close are listed.
  */
-export function formatReport({ asOf, searches, candidates, notRead = 0, partial = null, found = null, terms = null, termsDropped = 0 }) {
+export function formatReport({ asOf, searches, candidates, notRead = 0, partial = null, found = null, terms = null, termsDropped = 0, ghPath = null }) {
   const ranked = rank(candidates), shown = ranked.filter((c) => c.verdict === "contribute" || c.verdict === "close");
   const head = `prior-art: ${searches.length} search${searches.length === 1 ? "" : "es"}, ${candidates.length} candidate${candidates.length === 1 ? "" : "s"} scored${notRead ? `, ${notRead} not read` : ""}${found !== null ? ` (GitHub reports ${found} matching repositories in all)` : ""}${partial ? "   [PARTIAL]" : ""}  as of ${asOf}`;
   const out = [head];
   if (partial) out.push(`stopped early: ${clean(partial, 160)}. The result below is incomplete.`);
   if (terms) out.push(`matched on: ${terms.map((t) => clean(t, 40)).join(", ")}${termsDropped > 0 ? ` (${termsDropped} more word${termsDropped === 1 ? "" : "s"} in your description were not used)` : ""}${terms.length <= 2 ? `; only ${terms.length} searchable word${terms.length === 1 ? "" : "s"}, so matches are broad` : ""}`);
   if (shown.length === 0) out.push(partial || notRead ? "Nothing decent found among the candidates that were read." : "Nothing decent found.");
-  shown.forEach((c, i) => out.push("", formatCandidate(c, i + 1)));
+  shown.forEach((c, i) => out.push("", formatCandidate(c, i + 1, { ghPath })));
   const skipped = ranked.filter((c) => c.verdict === "skip");
   if (skipped.length) out.push("", `Skipped (${skipped.length}): ${skipped.map((c) => `${clean(c.fullName, 80)} (${clean(c.failures.join("; ") || "several criteria fail", 110)})`).join("; ")}`);
   out.push("", "This is keyword matching on names, descriptions and topics, not understanding, and it does not prove nothing better exists.", "A recommendation to contribute is not a promise the project wants it.", `Searches: ${searches.map((s) => clean(s, 200)).join(" | ")}`);

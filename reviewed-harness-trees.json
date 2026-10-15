@@ -6,7 +6,8 @@
     "cdc499b9b8b3b485e36645b4a734517d23528c314a600a95851330d2b99e9d24",
     "945c7777dbfb2829380719b1608ad1eb703b153eadf42d93d963693031c8a04c",
     "be2481b316a7ad25bab83581c70749a7c39eba66b56909189fd10aeee4f7b256",
-    "4ab6ddd66a19e346307655cf1676d5886aaf4193921a7bdda957e0505d3abe1f"
+    "4ab6ddd66a19e346307655cf1676d5886aaf4193921a7bdda957e0505d3abe1f",
+    "b50827c9d4bdb7e3b1d4c0a75369164cada8966188e9780e787d5e12352b23bd"
   ],
   "released": [
     {
@@ -49,6 +50,13 @@
       "date": "2026-10-15",
       "reviewed_by": "Opus 5.5 (twice: a read of the prior-art scoring, then a code review of the whole prior-art command) and Hermes (code review of the prior-art command), with fixes folded in. The fixes made after the code reviews (the read-only allowlist, response-time filtering, contributor merging, report wording) are covered by tests and 38 mutations and were not re-read by a reviewer",
       "known_limits": "as the previous release, plus the prior-art command: keyword overlap on names, descriptions and topics cannot tell a parser from a linter, so its matches are leads, not judgements; contributors are counted among the latest 100 commits and email-only authors are not trusted to carry the count; first-reply time may come from any non-author commenter and samples the 20 most recently updated closed items; GitHub's pushed_at also moves on bot branches; a branch name containing / makes the file listing unknown; the read-only wrapper is an allowlist of the two request shapes the search code builds; no real project has an opt-in file yet, so the run-one line has only been tested against a fake GitHub"
+    },
+    {
+      "srcTreeHash": "b50827c9d4bdb7e3b1d4c0a75369164cada8966188e9780e787d5e12352b23bd",
+      "commit": "1c3cb6873d86ba410f9497a97d574e72d9f336fa",
+      "date": "2026-10-15",
+      "reviewed_by": "As the previous release (tree 4ab6ddd6: Opus 5.5 and Hermes reviewed the prior-art command). This release adds two changes that were NOT re-read by a reviewer, both covered by tests and mutations: the reply-rate default moved from 0.5 to 0.25 after a calibration run on six well-known kinds of project (appendix/goal4/D2-calibration-run-2026-10-15.md), and a timeout or server error on one candidate now skips only that candidate (a rate limit or a surprise still stops the run)",
+      "known_limits": "as the previous release; the thresholds are still provisional and rest on 36 candidates in one calibration run"
     }
   ]
 }

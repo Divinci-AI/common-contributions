@@ -57,6 +57,13 @@
       "date": "2026-10-15",
       "reviewed_by": "As the previous release (tree 4ab6ddd6: Opus 5.5 and Hermes reviewed the prior-art command). This release adds two changes that were NOT re-read by a reviewer, both covered by tests and mutations: the reply-rate default moved from 0.5 to 0.25 after a calibration run on six well-known kinds of project (appendix/goal4/D2-calibration-run-2026-10-15.md), and a timeout or server error on one candidate now skips only that candidate (a rate limit or a surprise still stops the run)",
       "known_limits": "as the previous release; the thresholds are still provisional and rest on 36 candidates in one calibration run"
+    },
+    {
+      "srcTreeHash": "ab6820c639b29057d5dcaa84917d6fef61e33926d9c92b5254d997f556c91da7",
+      "commit": "5671483721d0f701121152fda5496335043d329b",
+      "date": "2026-10-15",
+      "reviewed_by": "Opus 5.5 and Hermes read the opt-in --matcher change (commit 67aeb63) without the author's conclusions and their findings were folded in (no redirects, total time budget, dry-run vs --json, earlier refusal, honest header and caveat, announced text flushed, tests never reach a real Ollama), each with a test and a mutation check. The fixes made after those reads (commits b0724c6 and 5671483) were NOT re-read by a reviewer.",
+      "known_limits": "the matcher works only with a local Ollama model; hosted models are not built in. Its quality is measured on 63 candidates whose labels were drafted by the author and have not been corrected by a person; tev1 calls add-ons and look-alike repositories 'the same kind' (seen on a live run). The order is a hint, and a repository's own description can sway the model. The two-letter-term gap in keyword search (s3, go) is not fixed."
     }
   ]
 }

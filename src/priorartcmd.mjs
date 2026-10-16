@@ -8,19 +8,22 @@
  */
 import { createSearch, clean, LIMITS } from "./ghsearch.mjs";
 import { GhError, HEADERS } from "./ghclient.mjs";
-import { extractTerms, overlap, makePolicy, scoreCandidate, rank, formatReport, runOneLine, CAVEATS } from "./priorart.mjs";
+import { extractTerms, overlap, makePolicy, scoreCandidate, rank, formatReport, runOneLine, CAVEATS, MATCHER_CAVEAT } from "./priorart.mjs";
+import { shown as shownOf, reorder } from "./matcher.mjs";
+import { describeSend, matchCandidates, modelVersion, loopbackHost, validModel, DEFAULT_HOST } from "./matcherclient.mjs";
 
 export const MAX_SEARCHES = 6;
 const MAX_DESCRIPTION = 2000;
 const DAY = 86400000;
 
-export const USAGE = `usage: prior-art "<what you plan to build, in a sentence or two>" --gh /abs/path/to/gh [--language L] [--license-ok MIT,Apache-2.0,...] [--max-age-days N] [--min-contributors N] [--limit 1-10] [--json]
+export const USAGE = `usage: prior-art "<what you plan to build, in a sentence or two>" --gh /abs/path/to/gh [--language L] [--license-ok MIT,Apache-2.0,...] [--max-age-days N] [--min-contributors N] [--limit 1-10] [--json] [--matcher OLLAMA_MODEL [--matcher-host URL] [--dry-run-matcher]]
 --limit is how many candidates are read in detail (the search itself always fetches at least 10 results).
-Looks for existing open projects on GitHub (read-only, through your own gh) and says whether one is worth contributing to instead. It never opens an issue, comments, forks, stars or contacts anyone.`;
+Looks for existing open projects on GitHub (read-only, through your own gh) and says whether one is worth contributing to instead. It never opens an issue, comments, forks, stars or contacts anyone.
+--matcher asks a model running on THIS machine (Ollama, loopback only) whether each candidate is the same kind of project, and orders the list by its answer. It is off unless you pass it; it prints exactly what it sends before it asks; --dry-run-matcher prints that and stops without asking.`;
 
 class UsageError extends Error {}
 
-const FLAGS = { "--gh": true, "--language": true, "--license-ok": true, "--max-age-days": true, "--min-contributors": true, "--limit": true, "--json": false };
+const FLAGS = { "--gh": true, "--language": true, "--license-ok": true, "--max-age-days": true, "--min-contributors": true, "--limit": true, "--json": false, "--matcher": true, "--matcher-host": true, "--dry-run-matcher": false };
 
 /** Strict parsing: one positional (the description), known flags only, each flag at most once, numbers are plain digits. */
 export function parseArgs(argv) {
@@ -56,9 +59,16 @@ export function parseArgs(argv) {
   if (age !== undefined) overrides.maxAgeDays = age;
   if (minc !== undefined) overrides.minContributors = minc;
   if ("--license-ok" in flags) overrides.licenseOk = flags["--license-ok"].split(",");
+  let matcher = null;
+  if ("--matcher" in flags) {
+    if (!validModel(flags["--matcher"])) throw new UsageError("--matcher: the name of a model in your local Ollama");
+    const host = loopbackHost(flags["--matcher-host"] ?? DEFAULT_HOST);
+    if (!host) throw new UsageError("--matcher-host must be an address on this machine (127.0.0.1 or localhost); a hosted matcher is not available here");
+    matcher = { model: flags["--matcher"], host, dryRun: flags["--dry-run-matcher"] === true };
+  } else if ("--matcher-host" in flags || "--dry-run-matcher" in flags) throw new UsageError("--matcher-host and --dry-run-matcher need --matcher MODEL");
   let policy;
   try { policy = makePolicy(overrides); } catch (e) { throw new UsageError(clean(e.message, 200)); }
-  return { description, gh, language: flags["--language"], limit: int("--limit", 1, 10) ?? 10, json: flags["--json"] === true, policy };
+  return { description, gh, language: flags["--language"], limit: int("--limit", 1, 10) ?? 10, json: flags["--json"] === true, policy, matcher };
 }
 
 /**
@@ -91,18 +101,19 @@ export function rarest(terms, repos, n = 3) {
 }
 
 /**
- * Run the whole thing. `run` is the gh runner (real or fake), `now` is milliseconds. Returns { code, stdout, stderr }: nothing is printed here.
+ * The GitHub half: arguments in, the scored candidates out (or a finished result when the run ends early). Reads GitHub only, through the read-only wrapper.
+ * Returns { result } (a final { code, stdout, stderr }) or { ctx } (what `render` needs).
  */
-export function runPriorArt(argv, { run, now, maxSearches = MAX_SEARCHES }) {
+function gather(argv, { run, now, maxSearches = MAX_SEARCHES }) {
   let args;
   try { args = parseArgs(argv); } catch (e) {
-    if (e instanceof UsageError) return { code: 2, stdout: "", stderr: `${clean(e.message, 300)}\n${USAGE}\n` };
+    if (e instanceof UsageError) return { result: { code: 2, stdout: "", stderr: `${clean(e.message, 300)}\n${USAGE}\n` } };
     throw e;
   }
   if (!Number.isFinite(now)) throw new Error("runPriorArt needs `now`");
   const terms = extractTerms(args.description, LIMITS.maxTerms);
   const termsDropped = extractTerms(args.description, 100).length - terms.length;
-  if (terms.length === 0) return { code: 2, stdout: "", stderr: `no searchable words in the description (it needs words of 3+ letters that are not filler)\n${USAGE}\n` };
+  if (terms.length === 0) return { result: { code: 2, stdout: "", stderr: `no searchable words in the description (it needs words of 3+ letters that are not filler)\n${USAGE}\n` } };
 
   const search = createSearch(readOnly(run));
   const perPage = Math.min(LIMITS.maxResults, Math.max(args.limit, 10));
@@ -131,7 +142,7 @@ export function runPriorArt(argv, { run, now, maxSearches = MAX_SEARCHES }) {
     if (!(e instanceof GhError)) throw e;
     partial = why(e);
   }
-  if (ran.length === 0) return { code: 1, stdout: "", stderr: `could not search GitHub: ${partial}\nNo report was made: an empty result here would not mean nothing exists.\n` };
+  if (ran.length === 0) return { result: { code: 1, stdout: "", stderr: `could not search GitHub: ${partial}\nNo report was made: an empty result here would not mean nothing exists.\n` } };
 
   // Cheap first pass with no details: archived, wrong-licence, long-dead and unrelated projects are settled without spending any reads.
   const repos = [...byId.values()];
@@ -169,10 +180,45 @@ export function runPriorArt(argv, { run, now, maxSearches = MAX_SEARCHES }) {
   }
   if (!partial && skippedNames.length) { kind = "skipped"; partial = `${skippedNames.length} candidate${skippedNames.length === 1 ? "" : "s"} could not be read (a timeout or a server error on GitHub's side): ${skippedNames.join(", ")}`; }
 
+  return { ctx: { args, asOf, terms, termsDropped, ran, partial, notRead, found, unread, scored, nRead, kind } };
+}
+
+/** The report (or the JSON) from what `gather` found, with the model's opinions when there are any. Pure: no network, no clock. */
+function render({ args, asOf, terms, termsDropped, ran, partial, notRead, found, unread, scored, nRead, kind }, matcher = null) {
   if (args.json) {
-    const out = { asOf, terms, termsDropped, searches: ran, partial, notRead, found, unread, candidates: rank(scored).map((c) => ({ ...c, runOne: runOneLine(c, args.gh) })), caveats: CAVEATS };
+    const ranked = rank(scored), listed = matcher ? reorder(shownOf(ranked), matcher.answers) : [];
+    const candidates = (matcher ? [...listed, ...ranked.filter((c) => !listed.includes(c))] : ranked).map((c) => ({ ...c, runOne: runOneLine(c, args.gh), ...(matcher ? { matcherOpinion: matcher.answers[c.fullName] ?? null } : {}) }));
+    const out = { asOf, terms, termsDropped, searches: ran, partial, notRead, found, unread, ...(matcher ? { matcher: { model: matcher.model, version: matcher.version, host: matcher.host, unavailable: matcher.unavailable, stopped: matcher.stopped } } : {}), candidates, caveats: matcher ? [...CAVEATS, MATCHER_CAVEAT] : CAVEATS };
     return { code: partial ? 3 : 0, stdout: JSON.stringify(out, null, 2) + "\n", stderr: "" };
   }
-  const text = formatReport({ asOf, searches: ran, candidates: scored, notRead, partial, terms, termsDropped, ghPath: args.gh, found, unread, nRead, partialKind: kind });
+  const text = formatReport({ asOf, searches: ran, candidates: scored, notRead, partial, terms, termsDropped, ghPath: args.gh, found, unread, nRead, partialKind: kind, matcher });
   return { code: partial ? 3 : 0, stdout: text + "\n", stderr: "" };
+}
+
+/** Run the whole thing, keywords only. `run` is the gh runner (real or fake), `now` is milliseconds. Returns { code, stdout, stderr }: nothing is printed here. */
+export function runPriorArt(argv, opts) {
+  const g = gather(argv, opts);
+  if (g.result) return g.result;
+  if (g.ctx.args.matcher) return { code: 2, stdout: "", stderr: "--matcher needs the asynchronous entry point (runPriorArtMatched)\n" };
+  return render(g.ctx);
+}
+
+/**
+ * The same, with the optional model-assisted matcher (only when --matcher was given; otherwise this is exactly runPriorArt). `ask` is an async
+ * function task -> the model's text; `fetchImpl` is used only to read the model's version. `announce(text)` receives what is about to be sent, BEFORE any
+ * question is asked. The matcher can only reorder: the candidates and their verdicts are the keyword run's, and any failure leaves the keyword report with a note.
+ */
+export async function runPriorArtMatched(argv, { ask, announce = () => {}, fetchImpl, ...opts }) {
+  const g = gather(argv, opts);
+  if (g.result) return g.result;
+  const { ctx } = g, m = ctx.args.matcher;
+  if (!m) return render(ctx);
+  const candidates = shownOf(rank(ctx.scored));
+  const send = describeSend({ description: ctx.args.description, candidates, model: m.model, host: m.host });
+  if (m.dryRun) return { code: 0, stdout: `${send}\n\nThis was a dry run: no question was asked, and no model was contacted.\n`, stderr: "" };
+  if (candidates.length === 0) return render(ctx); // nothing to ask about: no model call, no model opinion line
+  announce(send);
+  const version = await modelVersion({ host: m.host, model: m.model, fetchImpl });
+  const r = await matchCandidates({ description: ctx.args.description, candidates, ask });
+  return render(ctx, { model: m.model, host: m.host, version, ...r });
 }

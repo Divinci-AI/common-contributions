@@ -4,6 +4,7 @@
  * The rule that matters most: a number that is missing is `null` and prints as "unknown". It is never scored as good, and it never counts as a failure either.
  */
 import { clean } from "./ghsearch.mjs";
+import { reorder } from "./matcher.mjs";
 
 /** Provisional (D2). One object, so changing a default is a one-line edit. */
 export const POLICY = Object.freeze({
@@ -180,8 +181,17 @@ export function runOneLine(c, ghPath) {
 /** Said by every report, in either form. */
 export const CAVEATS = ["This is keyword matching on names, descriptions and topics, not understanding, and it does not prove nothing better exists.", "A recommendation to contribute is not a promise the project wants it."];
 
+export const MATCHER_CAVEAT = "A model's opinion of relevance can be wrong; the verdicts above are the keyword verdicts, and no candidate was hidden or added by the model.";
+const label = (m) => `${clean(m.model, 100)}${m.version ? `, ${clean(m.version, 20)}` : ""}`;
+/** The line under a candidate: the model's answer, labelled as opinion, or a plain "unavailable". Never a number. */
+export const opinionLine = (m, c) => (m.answers[c.fullName] ? `model opinion (${label(m)}): ${{ yes: "the same kind of project", partly: "partly the same kind of project", no: "a different kind of project" }[m.answers[c.fullName]]}` : `model opinion (${label(m)}): unavailable for this candidate`);
+const matcherHeader = (m, n) => [
+  `matcher: ${label(m)}, on this machine (${clean(m.host, 60)}). The list below is ordered by that model's opinion of "same kind of project", then by the keyword order; verdicts and numbers are unchanged.`,
+  ...(m.unavailable.length ? [`matcher unavailable for ${m.unavailable.length} of ${n} candidate${n === 1 ? "" : "s"}${m.stopped ? " (the model stopped answering, so the rest were not asked)" : ""}; those keep their keyword position.`] : []),
+];
+
 /** Numbers first, then the verdict. Every string is cleaned again here, so a caller that forgot cannot print an escape sequence. */
-export function formatCandidate(c, i, { ghPath = null } = {}) {
+export function formatCandidate(c, i, { ghPath = null, opinion = null } = {}) {
   const n = c.numbers;
   const contributors = n.contributors ? `${n.contributors.count}${n.contributors.atLeast ? "+" : ""} commit author${n.contributors.count === 1 && !n.contributors.atLeast ? "" : "s"} in the last year` : "commit authors unknown";
   const response = n.response && n.response.responded > 0 ? `first non-author reply median ${fmtHours(n.response.medianHours)} (${n.response.responded} of ${n.response.considered} answered)` : n.response && n.response.considered === 0 ? "no closed issues or PRs found to measure (or the lookup came back empty)" : n.response ? `no replies seen in ${n.response.considered} closed item${n.response.considered === 1 ? "" : "s"}` : "first reply unknown";
@@ -190,6 +200,7 @@ export function formatCandidate(c, i, { ghPath = null } = {}) {
     `   numbers: ${n.license ? clean(n.license, 40) : "no license detected"} · pushed ${day(n.pushedAt)}${n.ageDays !== null ? ` (${n.ageDays}d ago)` : ""} · ${contributors} · ${response} · release ${!c.read ? "unknown (not read)" : n.lastReleaseAt ? day(n.lastReleaseAt) : "none on GitHub"} · CI ${yn(n.ci)} · tests ${yn(n.tests)} · overlap ${pct(c.overlap.fraction)} (${c.overlap.matched.map((t) => clean(t, 40)).join(", ") || "none"} of ${c.overlap.of} terms)`,
     `   verdict: ${c.verdict}${c.failures.length ? ` — ${c.failures.map((x) => clean(x, 120)).join("; ")}` : ""}`,
   ];
+  if (opinion) lines.push(`   ${clean(opinion, 200)}`);
   if (c.unknowns.length) lines.push(`   unknown: ${c.unknowns.map((x) => clean(x, 80)).join("; ")}`);
   if (c.notes.length) lines.push(`   note: ${c.notes.map((x) => clean(x, 120)).join("; ")}`);
   lines.push(`   ${clean(c.optin.text, 400)}`);
@@ -203,17 +214,19 @@ export function formatCandidate(c, i, { ghPath = null } = {}) {
  * The whole report. `searches` are the query strings that ran; `notRead` candidates were found but their details were not read;
  * `partial` carries the reason a run stopped early (a rate limit, an HTTP error). Only contribute / close are listed.
  */
-export function formatReport({ asOf, searches, candidates, notRead = 0, partial = null, found = null, terms = null, termsDropped = 0, ghPath = null, unread = [], nRead = null, partialKind = "stopped" }) {
+export function formatReport({ asOf, searches, candidates, notRead = 0, partial = null, found = null, terms = null, termsDropped = 0, ghPath = null, unread = [], nRead = null, partialKind = "stopped", matcher = null }) {
   const ranked = rank(candidates), shown = ranked.filter((c) => c.verdict === "contribute" || c.verdict === "close");
   const head = `prior-art: ${searches.length} search${searches.length === 1 ? "" : "es"}, ${candidates.length} candidate${candidates.length === 1 ? "" : "s"} scored${notRead ? `, ${notRead} not read` : ""}${found !== null && found > candidates.length + notRead ? ` (the broadest search matched ${found} repositories on GitHub; only the top results of each search were looked at)` : ""}${partial ? "   [PARTIAL]" : ""}  as of ${asOf}`;
   const out = [head];
+  if (matcher) out.push(...matcherHeader(matcher, shown.length));
   if (partial) out.push(`${partialKind === "skipped" ? "some candidates were skipped" : "stopped early"}: ${clean(partial, 300)}. The result below is incomplete.`);
   if (terms) out.push(`matched on: ${terms.map((t) => clean(t, 40)).join(", ")}${termsDropped > 0 ? ` (${termsDropped} more word${termsDropped === 1 ? "" : "s"} in your description were not used)` : ""}${terms.length <= 2 ? `; only ${terms.length} searchable word${terms.length === 1 ? "" : "s"}, so matches are broad` : ""}`);
   if (shown.length === 0) out.push(nRead === 0 && (partial || notRead) ? "No candidate details were read, so nothing could be judged." : partial || notRead ? "Nothing decent found among the candidates that were read." : "Nothing decent found.");
   if (unread.length) out.push(`Found but not read: ${unread.slice(0, 10).map((u) => clean(u, 80)).join(", ")}${unread.length > 10 ? ` and ${unread.length - 10} more` : ""}`);
-  shown.forEach((c, i) => out.push("", formatCandidate(c, i + 1, { ghPath })));
+  const listed = matcher ? reorder(shown, matcher.answers) : shown;
+  listed.forEach((c, i) => out.push("", formatCandidate(c, i + 1, { ghPath, opinion: matcher ? opinionLine(matcher, c) : null })));
   const skipped = ranked.filter((c) => c.verdict === "skip");
   if (skipped.length) out.push("", `Skipped (${skipped.length}): ${skipped.map((c) => `${clean(c.fullName, 80)} (${clean(c.failures.join("; ") || "several criteria fail", 110)})`).join("; ")}`);
-  out.push("", ...CAVEATS, `Searches: ${searches.map((s) => clean(s, 200)).join(" | ")}`);
+  out.push("", ...CAVEATS, ...(matcher ? [MATCHER_CAVEAT] : []), `Searches: ${searches.map((s) => clean(s, 200)).join(" | ")}`);
   return out.join("\n");
 }

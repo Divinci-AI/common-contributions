@@ -10,6 +10,7 @@ import { clean } from "./ghsearch.mjs";
 
 export const DEFAULT_HOST = "http://127.0.0.1:11434";
 export const ASK_TIMEOUT_MS = 60000;
+export const TOTAL_BUDGET_MS = 300000; // the whole matcher gets five minutes; what is not answered by then is unavailable
 export const STOP_AFTER_FAILURES = 3; // this many failures in a row and the rest are not asked: a model that is down will not answer the next one either
 
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
@@ -42,7 +43,7 @@ export function makeOllamaAsk({ host, model, fetchImpl = globalThis.fetch, timeo
   return async function ask(task) {
     const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), timeoutMs);
     try {
-      const r = await fetchImpl(`${base}/api/generate`, { method: "POST", headers: { "content-type": "application/json" }, signal: ctl.signal, body: JSON.stringify({ model, system: task.system, prompt: task.prompt, stream: false, think: false, options: { temperature: 0, num_predict: 8 } }) });
+      const r = await fetchImpl(`${base}/api/generate`, { method: "POST", headers: { "content-type": "application/json" }, redirect: "error", signal: ctl.signal, body: JSON.stringify({ model, system: task.system, prompt: task.prompt, stream: false, think: false, options: { temperature: 0, num_predict: 8 } }) });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const j = JSON.parse(await r.text());
       if (typeof j?.response !== "string") throw new Error("no text in the reply");
@@ -57,7 +58,7 @@ export async function modelVersion({ host, model, fetchImpl = globalThis.fetch, 
   if (!base) return null;
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    const r = await fetchImpl(`${base}/api/tags`, { signal: ctl.signal });
+    const r = await fetchImpl(`${base}/api/tags`, { redirect: "error", signal: ctl.signal });
     if (!r.ok) return null;
     const j = JSON.parse(await r.text());
     const m = Array.isArray(j?.models) ? j.models.find((x) => x?.name === model || x?.model === model) : null;
@@ -70,10 +71,11 @@ export async function modelVersion({ host, model, fetchImpl = globalThis.fetch, 
  * A throw, a timeout or an answer that is not a single listed letter makes THAT candidate unavailable. After STOP_AFTER_FAILURES in a row the rest are
  * not asked (and are unavailable). A candidate is never given an answer the model did not give.
  */
-export async function matchCandidates({ description, candidates, ask, variant = DEFAULT_VARIANT }) {
-  const answers = {}, unavailable = [];
+export async function matchCandidates({ description, candidates, ask, variant = DEFAULT_VARIANT, budgetMs = TOTAL_BUDGET_MS, clock = Date.now }) {
+  const answers = {}, unavailable = [], deadline = clock() + budgetMs;
   let streak = 0, stopped = false;
   for (const c of candidates) {
+    if (!stopped && clock() > deadline) stopped = true;
     if (stopped) { unavailable.push(c.fullName); continue; }
     let label = null, failed = false;
     try { label = parseChoice(await ask(buildTask(description, c, { variant }))); } catch { failed = true; }

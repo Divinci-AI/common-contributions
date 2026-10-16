@@ -65,6 +65,7 @@ export function parseArgs(argv) {
     const host = loopbackHost(flags["--matcher-host"] ?? DEFAULT_HOST);
     if (!host) throw new UsageError("--matcher-host must be an address on this machine (127.0.0.1 or localhost); a hosted matcher is not available here");
     matcher = { model: flags["--matcher"], host, dryRun: flags["--dry-run-matcher"] === true };
+    if (matcher.dryRun && flags["--json"]) throw new UsageError("--dry-run-matcher prints text; it cannot be combined with --json");
   } else if ("--matcher-host" in flags || "--dry-run-matcher" in flags) throw new UsageError("--matcher-host and --dry-run-matcher need --matcher MODEL");
   let policy;
   try { policy = makePolicy(overrides); } catch (e) { throw new UsageError(clean(e.message, 200)); }
@@ -197,9 +198,9 @@ function render({ args, asOf, terms, termsDropped, ran, partial, notRead, found,
 
 /** Run the whole thing, keywords only. `run` is the gh runner (real or fake), `now` is milliseconds. Returns { code, stdout, stderr }: nothing is printed here. */
 export function runPriorArt(argv, opts) {
+  try { if (parseArgs(argv).matcher) return { code: 2, stdout: "", stderr: "--matcher needs the asynchronous entry point (runPriorArtMatched)\n" }; } catch { /* gather reports bad arguments */ }
   const g = gather(argv, opts);
   if (g.result) return g.result;
-  if (g.ctx.args.matcher) return { code: 2, stdout: "", stderr: "--matcher needs the asynchronous entry point (runPriorArtMatched)\n" };
   return render(g.ctx);
 }
 

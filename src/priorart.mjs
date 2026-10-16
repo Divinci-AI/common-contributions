@@ -181,13 +181,13 @@ export function runOneLine(c, ghPath) {
 /** Said by every report, in either form. */
 export const CAVEATS = ["This is keyword matching on names, descriptions and topics, not understanding, and it does not prove nothing better exists.", "A recommendation to contribute is not a promise the project wants it."];
 
-export const MATCHER_CAVEAT = "A model's opinion of relevance can be wrong; the verdicts above are the keyword verdicts, and no candidate was hidden or added by the model.";
+export const MATCHER_CAVEAT = "A model's opinion of relevance can be wrong; the verdicts above are the keyword verdicts, and no candidate was hidden or added by the model. A repository's own description is read by the model and can sway it, so treat the order as a hint.";
 const label = (m) => `${clean(m.model, 100)}${m.version ? `, ${clean(m.version, 20)}` : ""}`;
 /** The line under a candidate: the model's answer, labelled as opinion, or a plain "unavailable". Never a number. */
 export const opinionLine = (m, c) => (m.answers[c.fullName] ? `model opinion (${label(m)}): ${{ yes: "the same kind of project", partly: "partly the same kind of project", no: "a different kind of project" }[m.answers[c.fullName]]}` : `model opinion (${label(m)}): unavailable for this candidate`);
 const matcherHeader = (m, n) => [
   `matcher: ${label(m)}, on this machine (${clean(m.host, 60)}). The list below is ordered by that model's opinion of "same kind of project", then by the keyword order; verdicts and numbers are unchanged.`,
-  ...(m.unavailable.length ? [`matcher unavailable for ${m.unavailable.length} of ${n} candidate${n === 1 ? "" : "s"}${m.stopped ? " (the model stopped answering, so the rest were not asked)" : ""}; those keep their keyword position.`] : []),
+  ...(m.unavailable.length ? [`matcher unavailable for ${m.unavailable.length} of ${n} candidate${n === 1 ? "" : "s"}${m.stopped ? " (the model stopped answering, so the rest were not asked)" : ""}; those are ordered as "partly" (neither up nor down) among the answered ones.`] : []),
 ];
 
 /** Numbers first, then the verdict. Every string is cleaned again here, so a caller that forgot cannot print an escape sequence. */

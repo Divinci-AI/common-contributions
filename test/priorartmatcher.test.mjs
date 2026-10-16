@@ -152,11 +152,11 @@ test("arguments: the host must be this machine, the model a plain name, and the 
   assert.equal(parseArgs(A(M)).matcher.host, "http://127.0.0.1:11434");
   assert.equal(parseArgs(A([...M, "--matcher-host", "http://localhost:9999", "--dry-run-matcher"])).matcher.dryRun, true);
   assert.equal(parseArgs(A()).matcher, null);
-  for (const bad of [["--matcher-host", "http://evil.example"], ["--matcher", "tev1", "--matcher-host", "http://192.168.1.5:11434"], ["--matcher", "-x"], ["--matcher"], ["--dry-run-matcher"], ["--matcher-host", "http://127.0.0.1:1"], ["--matcher", "m", "--matcher", "n"]]) assert.throws(() => parseArgs(A(bad)), /./, JSON.stringify(bad));
+  for (const bad of [["--matcher-host", "http://evil.example"], ["--matcher", "tev1", "--matcher-host", "http://192.168.1.5:11434"], ["--matcher", "-x"], ["--matcher"], ["--dry-run-matcher"], ["--matcher-host", "http://127.0.0.1:1"], ["--matcher", "m", "--matcher", "n"], [...M, "--dry-run-matcher", "--json"]]) assert.throws(() => parseArgs(A(bad)), /./, JSON.stringify(bad));
 });
 
 test("runPriorArt (the keyword entry point) refuses --matcher instead of silently ignoring it", () => {
-  const r = runPriorArt(A(M), { run: build(THREE).run, now: NOW });
+  const r = runPriorArt(A(M), { run: () => assert.fail("GitHub was read before the refusal"), now: NOW });
   assert.equal(r.code, 2);
   assert.match(r.stderr, /asynchronous/);
 });

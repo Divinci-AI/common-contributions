@@ -87,6 +87,23 @@ test("matchCandidates: an unreadable answer is the model replying, so it breaks 
   assert.deepEqual(r.answers, { "acme/z5": "partly" });
 });
 
+test("neither request follows a redirect (a service on the port could otherwise forward the plan off this machine)", async () => {
+  const seen = [];
+  const f = async (url, init) => { seen.push(init); return json({ response: "A", models: [] }); };
+  await makeOllamaAsk({ host: "http://127.0.0.1:11434", model: "m", fetchImpl: f })({ system: "s", prompt: "p" });
+  await modelVersion({ host: "http://127.0.0.1:11434", model: "m", fetchImpl: f });
+  assert.equal(seen.length, 2);
+  for (const i of seen) assert.equal(i.redirect, "error");
+});
+
+test("matchCandidates: a total time budget; past it the rest are unavailable and not asked, however well each answer went", async () => {
+  let t = 0, asked = 0;
+  const r = await matchCandidates({ description: "d", candidates: [1, 2, 3, 4].map((i) => C(`t${i}`)), budgetMs: 100, clock: () => t, ask: async () => { asked++; t += 60; return "A"; } });
+  assert.equal(asked, 2);
+  assert.equal(r.stopped, true);
+  assert.deepEqual(r.unavailable, ["acme/t3", "acme/t4"]);
+});
+
 test("describeSend: the exact system text and prompt that matchCandidates would send, the destination, and no call", () => {
   const cands = [C("a"), C("b")], text = describeSend({ description: "streaming csv parser", candidates: cands, model: "tev1:latest", host: "http://127.0.0.1:11434" });
   for (const c of cands) { const t = buildTask("streaming csv parser", c); assert.ok(text.includes(t.system) && text.includes(t.prompt), c.fullName); }

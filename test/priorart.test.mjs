@@ -14,6 +14,14 @@ const verdict = (...a) => score(...a).verdict;
 
 // ---- terms and overlap ----------------------------------------------------------------------------------------------------------------
 
+test("extractTerms: a few short names (go, s3, ml, db, js, ts, ui) are kept; other short words and digit mixes are still dropped", () => {
+  assert.deepEqual(extractTerms("backup tool for s3 written in Go"), ["backup", "tool", "s3", "written", "go"]);
+  assert.deepEqual(extractTerms("GO s3 go S3"), ["go", "s3"]);
+  assert.deepEqual(extractTerms("a b to of it is x2y k8s ai"), []);
+  assert.deepEqual(extractTerms("oauth2 s3cret"), ["oauth", "cret"]);
+  assert.equal(extractTerms("go s3 ml db js ts ui one two three").length, 8);
+});
+
 test("extractTerms: lowercase words of three letters or more, stop words dropped, distinct, in order, at most eight", () => {
   assert.deepEqual(extractTerms("I want to build a Streaming CSV parser in Rust, and the CSV reader must be fast!"), ["streaming", "csv", "parser", "rust", "reader", "must", "fast"]);
   assert.deepEqual(extractTerms("a b to of it is 42 x2y oauth2"), ["oauth"]);

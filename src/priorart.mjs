@@ -22,13 +22,21 @@ export const POLICY = Object.freeze({
 
 const STOP = new Set("the and for with that this from into over under onto using use used uses are was were been being have has had can could would should will want wants need needs like make makes made build building built get gets give gives let lets our their your its not but all any some more most much many very just also than then them they you who what when where which how why out off new one two per via etc own able".split(" "));
 
-/** Up to 8 distinct lowercase words of 3+ letters, in order of first appearance, minus stop words. Words are split on anything that is not a letter. */
+// Short terms that are real names in this field and would otherwise be dropped (under three letters, or with a digit). Kept small on purpose: each one
+// matches more repositories, so adding "ai" here would lift almost every AI project's overlap.
+const SHORT_OK = new Set(["go", "s3", "ml", "db", "js", "ts", "ui"]);
+
+/** Up to 8 distinct lowercase words of 3+ letters (plus the few short terms in SHORT_OK), in order of first appearance, minus stop words. Words are split on anything that is not a letter. */
 export function extractTerms(description, max = 8) {
   if (typeof description !== "string") return [];
   const out = [];
-  for (const w of description.toLowerCase().split(/[^a-z]+/)) {
-    if (w.length < 3 || w.length > 40 || STOP.has(w) || out.includes(w)) continue;
-    out.push(w);
+  for (const chunk of description.toLowerCase().split(/[^a-z0-9]+/)) {
+    for (const w of SHORT_OK.has(chunk) ? [chunk] : chunk.split(/[^a-z]+/)) {
+      if (out.length === max) break;
+      if (!SHORT_OK.has(w) && (w.length < 3 || w.length > 40 || STOP.has(w))) continue;
+      if (out.includes(w)) continue;
+      out.push(w);
+    }
     if (out.length === max) break;
   }
   return out;

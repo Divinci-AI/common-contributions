@@ -74,16 +74,18 @@ if (process.argv[2] === "prior-art") {
   const argv = process.argv.slice(3), gi = argv.indexOf("--gh");
   let run;
   try { run = ghRunner(gi !== -1 ? argv[gi + 1] : ""); } catch { run = () => { throw new Error("gh must be an absolute path"); }; }
+  // Exit only after both streams have flushed: process.exit() does not drain a pipe, and a report cut off mid-way would read as "nothing more found".
+  const flush = (stream, text) => new Promise((done) => (text ? stream.write(text, done) : done()));
+  const announced = []; // the "what is sent" text is flushed too, before the process may exit
   let r;
   if (argv.includes("--matcher")) {
     // The model-assisted matcher is opt-in. Its host is checked to be on this machine by parseArgs (via makeOllamaAsk) before anything is sent.
     const { makeOllamaAsk } = await import("./matcherclient.mjs");
     let ask;
     try { const m = parsePriorArt(argv).matcher; ask = makeOllamaAsk({ host: m.host, model: m.model }); } catch { ask = undefined; }
-    r = ask ? await runPriorArtMatched(argv, { run, now: Date.now(), ask, announce: (t) => process.stderr.write(t + "\n\n") }) : runPriorArt(argv, { run, now: Date.now() }); // bad arguments: the keyword entry point reports them
+    r = ask ? await runPriorArtMatched(argv, { run, now: Date.now(), ask, announce: (t) => announced.push(flush(process.stderr, t + "\n\n")) }) : runPriorArt(argv, { run, now: Date.now() }); // bad arguments: the keyword entry point reports them
   } else r = runPriorArt(argv, { run, now: Date.now() });
-  // Exit only after both streams have flushed: process.exit() does not drain a pipe, and a report cut off mid-way would read as "nothing more found".
-  const flush = (stream, text) => new Promise((done) => (text ? stream.write(text, done) : done()));
+  await Promise.all(announced);
   await flush(process.stdout, r.stdout);
   await flush(process.stderr, r.stderr);
   process.exit(r.code);
